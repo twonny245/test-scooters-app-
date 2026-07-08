@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Available Bikes — AA Scooters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sand:#F5EFE6;
+    --ink:#1A2421;
+    --petrol:#0F3D3E;
+    --petrol-light:#175A5B;
+    --cone:#FF6B35;
+    --card:#FFFFFF;
+    --line:#DED4C2;
+    --muted:#5A6663;
+    --ok:#2F855A;
+    --err:#C53030;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--sand); color:var(--ink);
+    font-family:'Inter',sans-serif; min-height:100vh;
+  }
+  .topbar{
+    background:var(--petrol); padding:14px 16px; display:flex;
+    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .topbar .brand{ display:flex; align-items:center; gap:8px; text-decoration:none; }
+  .topbar .brand img{ width:28px; height:28px; object-fit:contain; }
+  .topbar .brand span{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
+    color:#fff; letter-spacing:.02em;
+  }
+  .topbar nav{ display:flex; gap:16px; flex-wrap:wrap; }
+  .topbar nav a{
+    color:#CFE3E0; text-decoration:none; font-size:12.5px; font-weight:500;
+    padding:3px 0; border-bottom:2px solid transparent;
+  }
+  .topbar nav a:hover{ color:#fff; }
+  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
+  .page-head{ max-width:520px; margin:0 auto; padding:22px 16px 4px; }
+  .page-head h1{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
+    color:var(--petrol); margin:0;
+  }
+  .page-head .sub{ color:var(--muted); font-size:13px; margin-top:6px; }
+
+  main{ max-width:520px; margin:0 auto; padding:16px 16px 60px; }
+
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:18px; margin-bottom:16px;
+  }
+  .card h2{
+    font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:600;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--petrol);
+    margin:0 0 14px; display:flex; align-items:center; gap:8px;
+  }
+  .card h2::before{
+    content:""; width:7px; height:7px; border-radius:50%;
+    background:var(--cone); display:inline-block; flex-shrink:0;
+  }
+
+  .pick-hint{ font-size:12px; color:var(--muted); margin:-4px 0 12px; line-height:1.4; }
+
+  .search-wrap{ position:relative; margin-bottom:6px; }
+  .search-wrap input{
+    width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:10px;
+    font-size:15px; font-family:'Inter',sans-serif; background:#fff; color:var(--ink);
+  }
+  .search-wrap input:focus{ outline:none; border-color:var(--petrol-light); }
+
+  .load-status{
+    font-size:12px; color:#B36A2E; background:#FFF3E6; border:1px solid #F3D9B8;
+    border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none;
+  }
+  .load-status.show{ display:block; }
+
+  .results-count{
+    font-size:12px; color:#7A8A86; margin:12px 2px 10px;
+    font-family:'Barlow Condensed',sans-serif; letter-spacing:.06em; text-transform:uppercase;
+  }
+
+  .bike-list{ display:flex; flex-direction:column; gap:8px; }
+
+  .cat-section-head{
+    font-family:'Barlow Condensed',sans-serif; font-size:12.5px; font-weight:700;
+    letter-spacing:.06em; text-transform:uppercase; color:var(--petrol);
+    margin:18px 2px 2px; padding-bottom:6px; border-bottom:1px solid var(--line);
+    display:flex; align-items:baseline; justify-content:space-between; gap:8px;
+  }
+  .cat-section-head:first-child{ margin-top:0; }
+  .cat-section-head .cat-count{
+    font-weight:500; color:#7A8A86; letter-spacing:.02em; text-transform:none; font-size:11.5px;
+  }
+  .cat-section-head.no-cat{ color:#B36A2E; }
+
+  .bike-pick{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:#FBFAF7; border:1px solid var(--line); border-left:5px solid var(--ok);
+    border-radius:10px; padding:12px 14px; cursor:pointer; text-align:left;
+    font-family:'Inter',sans-serif; width:100%;
+  }
+  .bike-pick:hover{ border-color:var(--petrol-light); }
+  .bike-pick.selected{ border-left-color:var(--cone); background:#FFF3EC; }
+  .bike-pick .bp-name{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:16px; color:var(--petrol);
+  }
+  .bike-pick .bp-cat{
+    font-size:11.5px; color:var(--muted); margin-top:3px;
+  }
+  .bike-pick .bp-arrow{ color:var(--cone); font-size:18px; font-weight:700; flex-shrink:0; }
+  .bike-pick.selected .bp-arrow{ color:var(--ok); }
+
+  .empty-hint{ font-size:13px; color:#8A948F; padding:14px 2px; text-align:center; }
+
+  .continue-bar{ margin-top:14px; }
+  .continue-bar.hidden{ display:none; }
+
+  .selected-head{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;
+  }
+  .selected-head h2{ margin:0; }
+  .change-bike{
+    background:none; border:none; color:var(--petrol); text-decoration:underline;
+    font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500;
+    cursor:pointer; padding:0;
+  }
+
+  .sel-bike-row{
+    background:#FBFAF7; border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; margin-bottom:10px;
+  }
+  .sel-bike-top{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:6px;
+  }
+  .sel-bike-name{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15.5px; color:var(--petrol);
+  }
+  .remove-bike{
+    background:none; border:none; color:var(--err); text-decoration:underline;
+    font-family:'Inter',sans-serif; font-size:12px; font-weight:500; cursor:pointer; padding:0; flex-shrink:0;
+  }
+
+  .selected-cat{
+    font-size:12.5px; color:var(--petrol); margin:2px 0 0;
+    background:#EEF5F2; border:1px solid #D8E8E1; border-radius:7px;
+    padding:5px 9px; display:inline-block;
+  }
+  .selected-cat.warn{
+    color:#B36A2E; background:#FFF3E6; border-color:#F3D9B8;
+  }
+
+  label.f{
+    display:block; font-size:12.5px; font-weight:500; color:var(--muted); margin:0 0 6px;
+  }
+  .date-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+  input[type="date"], input[type="number"]{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
+    font-size:14.5px; font-family:'Inter',sans-serif; background:#FBFAF7; color:var(--ink);
+  }
+  input[type="date"]:focus, input[type="number"]:focus{
+    outline:none; border-color:var(--petrol-light); background:#fff;
+  }
+
+  .or-divider{
+    text-align:center; font-size:11px; color:#9AA6A1; margin:2px 0 10px;
+    text-transform:uppercase; letter-spacing:.08em;
+  }
+
+  .duration-pill{
+    background:#FBF6EC; border:1px dashed var(--line); border-radius:8px;
+    padding:9px 14px; margin:14px 0; display:none;
+    justify-content:space-between; align-items:center;
+  }
+  .duration-pill.show{ display:flex; }
+  .duration-pill span:first-child{
+    font-family:'Barlow Condensed',sans-serif; letter-spacing:.06em; text-transform:uppercase;
+    color:#7A8A86; font-size:12px;
+  }
+  .duration-pill span:last-child{ color:var(--petrol); font-size:14px; font-weight:700; }
+
+  .custom-rate-box{ margin-top:10px; }
+  .custom-rate-box .rate-input-wrap{ position:relative; }
+  .custom-rate-box .currency-prefix{
+    position:absolute; left:12px; top:50%; transform:translateY(-50%);
+    color:var(--muted); font-size:14px; pointer-events:none;
+  }
+  .custom-rate-box input[type="number"]{ padding-left:28px; }
+  .custom-rate-box .rate-hint{ color:var(--muted); font-size:11px; margin-top:6px; }
+
+  button.btn{
+    width:100%; padding:14px; border:none; border-radius:10px; background:var(--cone);
+    color:#fff; font-family:'Barlow Condensed',sans-serif; font-weight:700;
+    font-size:16px; letter-spacing:.04em; text-transform:uppercase; cursor:pointer;
+    transition:transform .1s, background .15s;
+  }
+  button.btn:active{ transform:scale(.98); }
+  button.btn:disabled{ background:#C9B9A8; cursor:not-allowed; }
+
+  .result-label{
+    font-family:'Barlow Condensed',sans-serif; font-size:12px; letter-spacing:.08em;
+    text-transform:uppercase; color:#7A8A86; margin-bottom:4px;
+  }
+  .result-price{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:34px;
+    color:var(--petrol); margin-bottom:14px;
+  }
+  .result-row{
+    display:flex; justify-content:space-between; font-size:13px;
+    padding:6px 0; border-bottom:1px solid var(--line);
+  }
+  .result-row:last-child{ border-bottom:none; }
+  .result-row .key{ color:var(--muted); }
+  .result-row .val{ color:var(--ink); font-weight:600; text-align:right; }
+
+  .status{ font-size:12.5px; margin-top:10px; }
+  .status.err{ color:var(--err); }
+  .status.ok{ color:var(--ok); }
+
+  .reply-box textarea{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
+    font-size:14px; font-family:'Inter',sans-serif; background:#FBFAF7; color:var(--ink);
+    resize:vertical; margin-bottom:10px; line-height:1.5; min-height:260px;
+    overflow-y:auto;
+  }
+  .reply-box textarea:focus{ outline:none; border-color:var(--petrol-light); background:#fff; }
+  button.copy-btn{ background:var(--petrol); }
+  .reply-box .status{ margin-top:8px; text-align:center; }
+
+  .hidden{ display:none; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="index.html">
+    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
+    <span>AA Scooter Rental</span>
+  </a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="customers.html">Customer Record</a>
+    <a href="pricing.html">Price Calculator</a>
+    <a href="parts.html">Parts &amp; Oil</a>
+    <a href="oilchange.html">Oil Change</a>
+    <a href="bikes.html">Bikes Status</a>
+    <a href="bikephotos.html">Bike Photos</a>
+    <a href="available-bikes.html" class="active">Available Bikes</a>
+    <a href="accounts.html">Accounts</a>
+  </nav>
+</div>
+
+<div class="page-head">
+  <h1>Available Bikes</h1>
+  <div class="sub">Pick one or more free bikes, set the dates, get prices for all of them</div>
+</div>
+
+<main>
+  <!-- STEP 1: pick one or more bikes that aren't currently rented -->
+  <div id="pickSection">
+    <div class="card">
+      <h2>Not rented right now</h2>
+      <div class="pick-hint">Tap to select as many bikes as you like — e.g. one per category — to quote them all at once and give the customer a few options.</div>
+      <div class="search-wrap">
+        <input type="text" id="bikeSearch" placeholder="Search available bikes… e.g. GT, Aerox" autocomplete="off">
+      </div>
+      <div class="load-status" id="loadStatus">Loading bikes…</div>
+      <div class="results-count" id="resultsCount"></div>
+      <div class="bike-list" id="bikeList"></div>
+      <div class="continue-bar hidden" id="continueBar">
+        <button class="btn" id="continueBtn" type="button">Continue with <span id="selCount">0</span> bike<span id="selCountPlural">s</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 2: dates + price, once at least one bike is picked -->
+  <div id="quoteSection" class="hidden">
+    <div class="card">
+      <div class="selected-head">
+        <h2>Selected bikes</h2>
+        <button type="button" class="change-bike" id="changeBikeBtn">Edit bikes</button>
+      </div>
+      <div id="selectedBikesList"></div>
+
+      <label class="f">Rental dates</label>
+      <div class="date-grid">
+        <div>
+          <label class="f" for="fromDate">From</label>
+          <input type="date" id="fromDate">
+        </div>
+        <div>
+          <label class="f" for="toDate">To</label>
+          <input type="date" id="toDate">
+        </div>
+      </div>
+
+      <div class="or-divider">— or —</div>
+      <label class="f" for="daysInput">Number of days</label>
+      <input type="number" id="daysInput" min="1" step="1" inputmode="numeric" placeholder="e.g. 12">
+
+      <div class="duration-pill" id="durationPill">
+        <span>Rental duration</span>
+        <span id="durationText"></span>
+      </div>
+
+      <button class="btn" id="calcBtn" type="button" disabled>Calculate Price</button>
+      <div class="status err" id="calcStatus"></div>
+    </div>
+
+    <div id="resultsContainer"></div>
+
+    <div class="card" id="replyCard" style="display:none;">
+      <div class="reply-box">
+        <label class="f" for="replyText">Reply message</label>
+        <textarea id="replyText" rows="12"></textarea>
+        <button type="button" class="btn copy-btn" id="copyReplyBtn">Copy Reply</button>
+        <div class="status ok" id="copyStatus"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
+
+// ---------- rate table (mirrors the Price Calculator page) ----------
+// Category text is looked up per-bike from the "Category" column in the
+// Parts and Oil change sheet, and matched (case/spacing-insensitive)
+// against these names, which mirror the Rates per day tab's categories.
+const CATEGORY_DEFS = [
+  { key: "125cc",                      label: "125CC" },
+  { key: "150-155cc standard key",     label: "155CC Standard Key" },
+  { key: "150-155cc keyless",          label: "155CC Keyless" },
+  { key: "nmax 155cc keyless",         label: "Nmax 155CC" },
+  { key: "forza 300cc",                label: "Forza 300CC" },
+  { key: "xmax 300 keyless",           label: "XMAX 300" },
+];
+
+const RATES = {
+  1:[300,400,450,500,600,800],2:[600,800,900,1000,1200,1600],
+  3:[900,1200,1300,1400,1800,2400],4:[1000,1300,1500,1600,2300,3100],
+  5:[1100,1500,1800,1900,2800,3800],6:[1200,1700,1900,2000,3300,4500],
+  7:[1300,1800,2000,2100,3800,5100],8:[1400,1900,2100,2200,4200,5700],
+  9:[1500,2000,2200,2300,4600,6300],10:[1600,2200,2300,2400,5000,6800],
+  11:[1700,2300,2400,2500,5400,7300],12:[1800,2400,2500,2600,5800,7800],
+  13:[1900,2500,2600,2700,6200,8300],14:[2000,2600,2700,2800,6500,8700],
+  15:[2100,2700,2800,2900,6900,9100],16:[2200,2800,2900,3000,7100,9500],
+  17:[2300,2900,3000,3100,7500,9800],18:[2400,3000,3100,3200,7900,10100],
+  19:[2500,3100,3300,3400,8300,10300],20:[2500,3200,3500,3600,8700,10500],
+  21:[2600,3300,3600,3700,9000,10700],22:[2600,3400,3700,3800,8100,10800],
+  23:[2700,3500,3800,3900,8400,11000],24:[2700,3600,3900,4200,8700,11200],
+  25:[2800,3700,4000,4500,9000,11400],26:[2800,3800,4100,4600,9200,11600],
+  27:[2900,3900,4200,4700,9400,11800],28:[2900,3900,4300,4800,9600,11900],
+  29:[3000,4000,4400,4900,9800,12000],30:[3000,4000,4500,5000,10000,12000],
+};
+
+function normalizeCategory(s) {
+  return (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function findCategoryIndex(catText) {
+  const norm = normalizeCategory(catText);
+  if (!norm) return -1;
+  return CATEGORY_DEFS.findIndex(c => c.key === norm);
+}
+
+// ---------- state ----------
+let bikeNames = [];       // all bike names, alphabetically sorted
+let bikeCategory = {};    // bikeName -> raw Category text from the sheet
+let bikeDetails = {};     // bikeName -> { make, model, cc, key, deposit, box } from the Bike Tax tab
+let customerRows = null;
+let selectedBikeSet = new Set(); // names of bikes picked for a quote
+let manualDaysMode = false; // true when the "Number of days" field is driving duration, not the calendar
+
+function setLoadStatus(msg) {
+  const el = document.getElementById('loadStatus');
+  if (!msg) { el.classList.remove('show'); return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function loadData() {
+  setLoadStatus('Loading bikes…');
+  return Promise.all([
+    fetch(scriptUrl + '?action=parts').then(res => res.json()),
+    fetch(scriptUrl).then(res => res.json()).catch(err => ({ success: false, error: err.message }))
+  ])
+    .then(([partsResult, customerResult]) => {
+      if (!partsResult.success) throw new Error(partsResult.error || 'Could not load bikes');
+
+      const bikeHeader = partsResult.headers[0];
+
+      bikeNames = [];
+      partsResult.rows.forEach(r => {
+        const name = (r[bikeHeader] || '').toString().trim();
+        if (!name) return;
+        bikeNames.push(name);
+      });
+      bikeNames.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+      // Category lives on the "Bike Tax" tab, not "Parts and Oil change" —
+      // matched onto our bike list the same fuzzy way rentals are matched.
+      bikeCategory = {};
+      bikeDetails = {};
+      const categoryRows = partsResult.categoryRows || [];
+      bikeNames.forEach(name => {
+        const match = categoryRows.find(cr => bikeNamesMatch(cr.bike, name));
+        bikeCategory[name] = match ? (match.category || '').toString().trim() : '';
+        bikeDetails[name] = {
+          make: match ? (match.make || '').toString().trim() : '',
+          model: match ? (match.model || '').toString().trim() : '',
+          cc: match ? (match.cc || '').toString().trim() : '',
+          key: match ? (match.key || '').toString().trim() : '',
+          deposit: match ? (match.deposit || '').toString().trim() : '',
+          box: match ? (match.box || '').toString().trim() : '',
+          abs: match ? (match.abs || '').toString().trim() : '',
+          tractionControl: match ? (match.tractionControl || '').toString().trim() : ''
+        };
+      });
+
+      if (customerResult && customerResult.success) {
+        customerRows = customerResult.rows;
+        setLoadStatus(null);
+      } else {
+        customerRows = [];
+        setLoadStatus('Rental info unavailable (' + (customerResult && customerResult.error ? customerResult.error : 'unknown error') + ') — all bikes will show as available.');
+      }
+      renderList();
+    })
+    .catch(err => {
+      setLoadStatus('Could not load bikes: ' + err.message);
+    });
+}
+
+// ---- Same rented/not-rented logic as the Bikes Status page ----
+function parseFlexibleDate(str) {
+  if (!str) return null;
+  str = String(str).trim();
+  var slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashMatch) {
+    var d = parseInt(slashMatch[1], 10), m = parseInt(slashMatch[2], 10) - 1, y = parseInt(slashMatch[3], 10);
+    var dt = new Date(y, m, d);
+    if (!isNaN(dt.getTime())) return dt;
+  }
+  var dt2 = new Date(str);
+  if (!isNaN(dt2.getTime())) return dt2;
+  return null;
+}
+
+function normalizeBikeName(s) {
+  return (s || '').toString()
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+// Words/numerals used to tell apart otherwise-identical bike names that are
+// actually different bikes — e.g. "Gran Filano" and "Gran Filano Two" are
+// two separate bikes, not a loose match of the same one.
+const DISTINGUISHING_SUFFIXES = new Set([
+  'one','two','three','four','five','six','seven','eight','nine','ten',
+  'i','ii','iii','iv','v','vi','vii','viii','ix','x',
+  '1','2','3','4','5','6','7','8','9','10'
+]);
+
+function bikeNamesMatch(a, b) {
+  const na = normalizeBikeName(a);
+  const nb = normalizeBikeName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+
+  const ta = na.split(' ');
+  const tb = nb.split(' ');
+  const shorter = ta.length <= tb.length ? ta : tb;
+  const longer = ta.length <= tb.length ? tb : ta;
+
+  // Fuzzy match allowed when the shorter name is a clean word-for-word
+  // prefix of the longer one — UNLESS the extra trailing word(s) are a
+  // distinguishing number/ordinal, in which case it's a different bike.
+  const isPrefix = shorter.every((tok, i) => tok === longer[i]);
+  if (isPrefix) {
+    const extra = longer.slice(shorter.length);
+    if (extra.some(t => DISTINGUISHING_SUFFIXES.has(t))) return false;
+    return true;
+  }
+
+  return na.includes(nb) || nb.includes(na);
+}
+
+function findCurrentRenter(bikeName) {
+  if (!customerRows || !customerRows.length) return null;
+  if (!normalizeBikeName(bikeName)) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const candidates = customerRows
+    .map((r, sheetIndex) => ({ r, sheetIndex }))
+    .filter(({ r }) => {
+      if (!bikeNamesMatch(r.bikeModel, bikeName)) return false;
+      const ret = parseFlexibleDate(r.returnDate);
+      if (!ret) return false;
+      ret.setHours(0, 0, 0, 0);
+      return ret >= today;
+    });
+
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => b.sheetIndex - a.sheetIndex);
+  return candidates[0].r;
+}
+
+function tokenMatch(value, query) {
+  if (!query) return true;
+  const v = (value || '').toString().toLowerCase();
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return tokens.every(t => v.includes(t));
+}
+
+function highlight(value, query) {
+  let out = String(value || '');
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  tokens.forEach(t => {
+    if (!t) return;
+    const re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
+    out = out.replace(re, '<mark>$1</mark>');
+  });
+  return out;
+}
+
+// ---------- STEP 1: multi-select list ----------
+function renderList() {
+  const listBox = document.getElementById('bikeList');
+  const countEl = document.getElementById('resultsCount');
+  const query = document.getElementById('bikeSearch').value.trim();
+
+  const available = bikeNames
+    .filter(name => !findCurrentRenter(name))
+    .filter(name => tokenMatch(name, query));
+
+  countEl.textContent = available.length + (available.length === 1 ? ' bike available' : ' bikes available');
+
+  if (!available.length) {
+    listBox.innerHTML = '<div class="empty-hint">No available bikes match.</div>';
+    return;
+  }
+
+  // Group bikes: one group per known CATEGORY_DEFS entry (in rate-table
+  // order), then any categories from the sheet that don't match a known
+  // rate (grouped by their raw text, alphabetically), then bikes with no
+  // category at all, last.
+  const knownGroups = CATEGORY_DEFS.map(def => ({ key: def.key, label: def.label, bikes: [] }));
+  const otherGroups = {}; // raw category text (lowercased) -> { label, bikes }
+  const noCatGroup = { label: 'No category set', bikes: [] };
+
+  available.forEach(name => {
+    const catText = bikeCategory[name];
+    const idx = findCategoryIndex(catText);
+    if (idx >= 0) {
+      knownGroups[idx].bikes.push(name);
+    } else if (catText) {
+      const key = normalizeCategory(catText);
+      if (!otherGroups[key]) otherGroups[key] = { label: catText, bikes: [] };
+      otherGroups[key].bikes.push(name);
+    } else {
+      noCatGroup.bikes.push(name);
+    }
+  });
+
+  const sections = []
+    .concat(knownGroups.filter(g => g.bikes.length))
+    .concat(
+      Object.values(otherGroups).sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }))
+    )
+    .concat(noCatGroup.bikes.length ? [noCatGroup] : []);
+
+  sections.forEach(sec => {
+    sec.bikes.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  });
+
+  listBox.innerHTML = sections.map(sec => {
+    const headClass = sec === noCatGroup ? 'cat-section-head no-cat' : 'cat-section-head';
+    const head = `<div class="${headClass}"><span>${sec.label}</span><span class="cat-count">${sec.bikes.length}</span></div>`;
+    const items = sec.bikes.map(name => {
+      const cat = bikeCategory[name];
+      const catLabel = cat ? cat : 'No category set';
+      const isSel = selectedBikeSet.has(name);
+      return `
+        <button type="button" class="bike-pick${isSel ? ' selected' : ''}" data-name="${name.replace(/"/g,'&quot;')}">
+          <span>
+            <span class="bp-name">${highlight(name, query)}</span>
+            <span class="bp-cat">${highlight(catLabel, query)}</span>
+          </span>
+          <span class="bp-arrow">${isSel ? '✓' : '+'}</span>
+        </button>
+      `;
+    }).join('');
+    return head + items;
+  }).join('');
+
+  listBox.querySelectorAll('.bike-pick').forEach(btn => {
+    btn.addEventListener('click', () => toggleBikeSelection(btn.getAttribute('data-name')));
+  });
+}
+
+document.getElementById('bikeSearch').addEventListener('input', renderList);
+
+function toggleBikeSelection(name) {
+  if (selectedBikeSet.has(name)) selectedBikeSet.delete(name);
+  else selectedBikeSet.add(name);
+  renderList();
+  updateContinueBar();
+}
+
+function updateContinueBar() {
+  const bar = document.getElementById('continueBar');
+  const n = selectedBikeSet.size;
+  document.getElementById('selCount').textContent = n;
+  document.getElementById('selCountPlural').textContent = n === 1 ? '' : 's';
+  bar.classList.toggle('hidden', n === 0);
+}
+
+document.getElementById('continueBtn').addEventListener('click', () => {
+  if (!selectedBikeSet.size) return;
+  document.getElementById('pickSection').classList.add('hidden');
+  document.getElementById('quoteSection').classList.remove('hidden');
+  renderSelectedBikes();
+  manualDaysMode = false;
+  document.getElementById('fromDate').value = '';
+  document.getElementById('toDate').value = '';
+  document.getElementById('daysInput').value = '';
+  document.getElementById('durationPill').classList.remove('show');
+  document.getElementById('resultsContainer').innerHTML = '';
+  document.getElementById('replyCard').style.display = 'none';
+  document.getElementById('calcStatus').textContent = '';
+  updateCalcBtn();
+});
+
+document.getElementById('changeBikeBtn').addEventListener('click', () => {
+  document.getElementById('quoteSection').classList.add('hidden');
+  document.getElementById('pickSection').classList.remove('hidden');
+  renderList();
+  updateContinueBar();
+});
+
+// ---------- STEP 2: selected bikes + per-bike custom rates ----------
+function customRateInputHtml(name) {
+  const escapedName = name.replace(/"/g, '&quot;');
+  return `
+    <div class="custom-rate-box">
+      <label class="f">Custom monthly rate for this bike</label>
+      <div class="rate-input-wrap">
+        <span class="currency-prefix">฿</span>
+        <input type="number" class="per-bike-rate-input" data-rate-for="${escapedName}" min="1" step="1" inputmode="numeric" placeholder="e.g. 3500">
+      </div>
+      <div class="rate-hint">This bike's category didn't match a known rate — enter a monthly rate to price it. Daily rate is this ÷ 30, scaled to the rental length.</div>
+    </div>
+  `;
+}
+
+function renderSelectedBikes() {
+  const box = document.getElementById('selectedBikesList');
+  const names = Array.from(selectedBikeSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+  box.innerHTML = names.map(name => {
+    const catText = bikeCategory[name];
+    const idx = findCategoryIndex(catText);
+    const escapedName = name.replace(/"/g, '&quot;');
+
+    let catHtml, rateHtml = '';
+    if (idx >= 0) {
+      catHtml = `<span class="selected-cat">Category: <b>${CATEGORY_DEFS[idx].label}</b></span>`;
+    } else if (catText) {
+      catHtml = `<span class="selected-cat warn">Category "${catText}" doesn't match a known rate</span>`;
+      rateHtml = customRateInputHtml(name);
+    } else {
+      catHtml = `<span class="selected-cat warn">No category set for this bike</span>`;
+      rateHtml = customRateInputHtml(name);
+    }
+
+    return `
+      <div class="sel-bike-row">
+        <div class="sel-bike-top">
+          <span class="sel-bike-name">${name}</span>
+          <button type="button" class="remove-bike" data-name="${escapedName}">Remove</button>
+        </div>
+        <div>${catHtml}</div>
+        ${rateHtml}
+      </div>
+    `;
+  }).join('');
+
+  box.querySelectorAll('.remove-bike').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = btn.getAttribute('data-name');
+      selectedBikeSet.delete(name);
+      if (!selectedBikeSet.size) {
+        document.getElementById('quoteSection').classList.add('hidden');
+        document.getElementById('pickSection').classList.remove('hidden');
+        renderList();
+        updateContinueBar();
+        return;
+      }
+      renderSelectedBikes();
+      updateCalcBtn();
+    });
+  });
+
+  box.querySelectorAll('.per-bike-rate-input').forEach(inp => {
+    inp.addEventListener('input', updateCalcBtn);
+  });
+}
+
+// ---------- dates: From/To, or Number of days (mutually exclusive — ----------
+// entering one clears the other, so "Number of days" never touches the
+// calendar fields and the calendar never gets silently overwritten).
+function daysBetween(from, to) {
+  if (!from || !to) return 0;
+  const diff = (new Date(to) - new Date(from)) / 86400000;
+  return diff > 0 ? Math.round(diff) : 0;
+}
+
+function monthDayBreakdown(from, to) {
+  if (!from || !to) return null;
+  const start = new Date(from);
+  const end = new Date(to);
+  if (end <= start) return null;
+
+  let months = 0;
+  let cursor = new Date(start);
+  while (true) {
+    const next = new Date(cursor);
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    if (next <= end) {
+      cursor = next;
+      months++;
+    } else {
+      break;
+    }
+  }
+  const days = Math.round((end - cursor) / 86400000);
+  return { months, days };
+}
+
+function fmtDuration(from, to) {
+  const bd = monthDayBreakdown(from, to);
+  if (!bd) return '';
+  if (bd.months === 0) {
+    return bd.days + (bd.days === 1 ? ' day' : ' days');
+  }
+  const parts = [bd.months + (bd.months === 1 ? ' month' : ' months')];
+  if (bd.days > 0) parts.push(bd.days + (bd.days === 1 ? ' day' : ' days'));
+  const totalDays = daysBetween(from, to);
+  return parts.join(', ') + ` (${totalDays} days total)`;
+}
+
+document.getElementById('fromDate').addEventListener('change', () => {
+  manualDaysMode = false;
+  document.getElementById('daysInput').value = '';
+  updateCalcBtn();
+});
+
+document.getElementById('toDate').addEventListener('change', () => {
+  manualDaysMode = false;
+  document.getElementById('daysInput').value = '';
+  updateCalcBtn();
+});
+
+document.getElementById('daysInput').addEventListener('input', () => {
+  const daysVal = parseInt(document.getElementById('daysInput').value, 10);
+  if (daysVal > 0) {
+    manualDaysMode = true;
+    document.getElementById('fromDate').value = '';
+    document.getElementById('toDate').value = '';
+  } else {
+    manualDaysMode = false;
+  }
+  updateCalcBtn();
+});
+
+// ---------- pricing ----------
+function priceFor(catIndex, customRate, months, leftoverDays) {
+  const isCustom = catIndex < 0;
+  let monthlyRate;
+
+  if (isCustom) {
+    if (!customRate) return null;
+    monthlyRate = customRate;
+  } else {
+    monthlyRate = RATES[30][catIndex];
+  }
+
+  if (months === 0) {
+    if (isCustom) return Math.round((monthlyRate / 30) * leftoverDays);
+    return RATES[leftoverDays] ? RATES[leftoverDays][catIndex] : null;
+  }
+
+  const dailyRate = monthlyRate / 30;
+  return Math.round(monthlyRate * months + leftoverDays * dailyRate);
+}
+
+function fmt(n) {
+  return '฿' + n.toLocaleString('en-US');
+}
+
+function fmtDate(str) {
+  if (!str) return '';
+  return new Date(str).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function allCustomRatesValid() {
+  return Array.from(selectedBikeSet).every(name => {
+    const catIndex = findCategoryIndex(bikeCategory[name]);
+    if (catIndex >= 0) return true;
+    const input = document.querySelector('.per-bike-rate-input[data-rate-for="' + CSS.escape(name) + '"]');
+    const v = input ? parseFloat(input.value) : NaN;
+    return !isNaN(v) && v > 0;
+  });
+}
+
+function updateCalcBtn() {
+  const from = document.getElementById('fromDate').value;
+  const to = document.getElementById('toDate').value;
+  const daysVal = parseInt(document.getElementById('daysInput').value, 10);
+
+  const pill = document.getElementById('durationPill');
+  let durationDays = 0;
+  let durationLabel = '';
+
+  if (manualDaysMode && daysVal > 0) {
+    durationDays = daysVal;
+    durationLabel = daysVal + (daysVal === 1 ? ' day' : ' days');
+  } else {
+    durationDays = daysBetween(from, to);
+    if (durationDays > 0) durationLabel = fmtDuration(from, to);
+  }
+
+  if (durationDays > 0) {
+    pill.classList.add('show');
+    document.getElementById('durationText').textContent = durationLabel;
+  } else {
+    pill.classList.remove('show');
+  }
+
+  const ready = durationDays > 0 && selectedBikeSet.size > 0 && allCustomRatesValid();
+  document.getElementById('calcBtn').disabled = !ready;
+  document.getElementById('resultsContainer').innerHTML = '';
+  document.getElementById('replyCard').style.display = 'none';
+  document.getElementById('calcStatus').textContent = '';
+}
+
+document.getElementById('calcBtn').addEventListener('click', () => {
+  const from = document.getElementById('fromDate').value;
+  const to = document.getElementById('toDate').value;
+  const daysVal = parseInt(document.getElementById('daysInput').value, 10);
+  const statusEl = document.getElementById('calcStatus');
+
+  let months, leftoverDays, totalDays, hasRealDates;
+
+  if (manualDaysMode && daysVal > 0) {
+    // Plain day count — no calendar dates involved at all.
+    totalDays = daysVal;
+    months = Math.floor(totalDays / 30);
+    leftoverDays = totalDays % 30;
+    hasRealDates = false;
+  } else {
+    const bd = monthDayBreakdown(from, to);
+    if (!from || !to || !bd) return;
+    months = bd.months;
+    leftoverDays = bd.days;
+    totalDays = daysBetween(from, to);
+    hasRealDates = true;
+  }
+
+  if (!totalDays) return;
+
+  const entries = [];
+  const names = Array.from(selectedBikeSet).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+  for (const name of names) {
+    const catIndex = findCategoryIndex(bikeCategory[name]);
+
+    if (catIndex >= 0 && months === 0 && !RATES[leftoverDays]) {
+      statusEl.textContent = `Could not find a rate for that many days for ${name}.`;
+      return;
+    }
+
+    let customRate = null;
+    if (catIndex < 0) {
+      const input = document.querySelector('.per-bike-rate-input[data-rate-for="' + CSS.escape(name) + '"]');
+      const v = input ? parseFloat(input.value) : NaN;
+      if (isNaN(v) || v <= 0) {
+        statusEl.textContent = `Enter a custom monthly rate for ${name} to price it.`;
+        return;
+      }
+      customRate = v;
+    }
+
+    const price = priceFor(catIndex, customRate, months, leftoverDays);
+    if (price === null) {
+      statusEl.textContent = `Could not calculate a price for ${name}.`;
+      return;
+    }
+
+    entries.push({
+      name,
+      price,
+      totalDays,
+      from: hasRealDates ? from : null,
+      to: hasRealDates ? to : null
+    });
+  }
+
+  statusEl.textContent = '';
+  renderResults(entries);
+});
+
+function renderResults(entries) {
+  const container = document.getElementById('resultsContainer');
+
+  container.innerHTML = entries.map(e => {
+    const avg = e.totalDays > 0 ? Math.round(e.price / e.totalDays) : 0;
+    const hasRealDates = !!(e.from && e.to);
+
+    const dateRows = hasRealDates ? `
+        <div class="result-row"><span class="key">From</span><span class="val">${fmtDate(e.from)}</span></div>
+        <div class="result-row"><span class="key">To</span><span class="val">${fmtDate(e.to)}</span></div>
+    ` : '';
+
+    const durationLabel = hasRealDates
+      ? fmtDuration(e.from, e.to)
+      : e.totalDays + (e.totalDays === 1 ? ' day' : ' days');
+
+    return `
+      <div class="card">
+        <div class="result-label">Total Rental Cost</div>
+        <div class="result-price">${fmt(e.price)}</div>
+        <div class="result-row"><span class="key">Bike</span><span class="val">${e.name}</span></div>
+        ${dateRows}
+        <div class="result-row"><span class="key">Duration</span><span class="val">${durationLabel}</span></div>
+        <div class="result-row"><span class="key">Per day avg</span><span class="val">${fmt(avg)}/day</span></div>
+      </div>
+    `;
+  }).join('');
+
+  const replyTextarea = document.getElementById('replyText');
+  replyTextarea.value = buildReplyTextMulti(entries);
+  document.getElementById('copyStatus').textContent = '';
+
+  const replyCard = document.getElementById('replyCard');
+  replyCard.style.display = 'block';
+  autoGrowReplyText();
+  replyCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function formatDepositText(raw) {
+  if (!raw) return '';
+  const num = parseFloat(raw.toString().replace(/[^0-9.]/g, ''));
+  if (!isNaN(num) && num > 0) return fmt(Math.round(num));
+  return raw;
+}
+
+// Duration phrasing just for the copyable reply text: exactly 30 days (or
+// a calendar range exactly as long as its starting month) reads as "one
+// month"; any other length is just the plain day count.
+function daysInMonthOf(dateStr) {
+  const d = new Date(dateStr);
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+}
+
+function replyDurationText(entry) {
+  if (entry.from && entry.to) {
+    const days = daysBetween(entry.from, entry.to);
+    const monthLength = daysInMonthOf(entry.from);
+    if (days === monthLength) return 'one month';
+    return days + (days === 1 ? ' day' : ' days');
+  }
+  const days = entry.totalDays;
+  if (days === 30) return 'one month';
+  return days + (days === 1 ? ' day' : ' days');
+}
+
+// One bullet line per bike, e.g.
+// "Yamaha Aerox 155cc (Keyless): ฿1,800 (Deposit: ฿2,000)"
+function bikeLineText(entry) {
+  const details = bikeDetails[entry.name] || {};
+
+  const nameParts = [];
+  if (details.make) nameParts.push(details.make);
+  if (details.model) nameParts.push(details.model);
+  if (details.cc) nameParts.push(details.cc);
+  const displayName = nameParts.length ? nameParts.join(' ') : entry.name;
+
+  const specParts = [];
+  if ((details.key || '').toString().trim()) specParts.push(details.key.toString().trim());
+  if ((details.box || '').toString().trim().toLowerCase() === 'yes') specParts.push('Top Box');
+  if ((details.abs || '').toString().trim().toLowerCase() === 'yes') specParts.push('ABS');
+  if ((details.tractionControl || '').toString().trim().toLowerCase() === 'yes') specParts.push('Traction Control');
+  const specText = specParts.length ? ` (${specParts.join(' + ')})` : '';
+
+  const depositText = formatDepositText(details.deposit);
+  const depositPart = depositText ? ` (Deposit: ${depositText})` : '';
+
+  return `• ${displayName}${specText}: ${fmt(entry.price)}${depositPart}`;
+}
+
+// "5" -> "5th", "21" -> "21st", "12" -> "12th", etc.
+function ordinalDay(n) {
+  const suffixes = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]);
+}
+
+function dayAndMonth(dateStr) {
+  const d = new Date(dateStr);
+  return { day: d.getDate(), month: d.toLocaleDateString('en-US', { month: 'long' }) };
+}
+
+// When real calendar dates were picked: "from the 5th to the 10th of July, 5 days"
+// (or "from the 28th of June to the 3rd of July, 5 days" across a month boundary).
+// Falls back to the plain duration phrasing ("for 5 days" / "for one month") when
+// only a day count was entered, with no calendar dates involved.
+function replyAvailabilityPhrase(entry) {
+  if (entry.from && entry.to) {
+    const start = dayAndMonth(entry.from);
+    const end = dayAndMonth(entry.to);
+    const days = daysBetween(entry.from, entry.to);
+    const dayWord = days === 1 ? 'day' : 'days';
+    const rangeText = start.month === end.month
+      ? `from the ${ordinalDay(start.day)} to the ${ordinalDay(end.day)} of ${start.month}`
+      : `from the ${ordinalDay(start.day)} of ${start.month} to the ${ordinalDay(end.day)} of ${end.month}`;
+    return `${rangeText}, ${days} ${dayWord}`;
+  }
+  return `for ${replyDurationText(entry)}`;
+}
+
+function buildReplyTextMulti(entries) {
+  if (!entries.length) return '';
+
+  const sorted = entries.slice().sort((a, b) => a.price - b.price);
+
+  const availability = replyAvailabilityPhrase(sorted[0]);
+  const bikeWord = sorted.length === 1 ? 'bike' : 'bikes';
+  const header = `Thanks for getting in touch! We have the following ${bikeWord} available ${availability}:`;
+
+  const lines = sorted.map(bikeLineText).join('\n');
+
+  return `${header}\n\n${lines}\n\nLet us know which one you're interested in, and we'll be happy to help!`;
+}
+
+function autoGrowReplyText() {
+  const el = document.getElementById('replyText');
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+document.getElementById('replyText').addEventListener('input', autoGrowReplyText);
+
+document.getElementById('copyReplyBtn').addEventListener('click', () => {
+  const textarea = document.getElementById('replyText');
+  const statusEl = document.getElementById('copyStatus');
+  const text = textarea.value;
+
+  function showCopied() {
+    statusEl.textContent = 'Copied — ready to paste.';
+    setTimeout(() => { statusEl.textContent = ''; }, 2500);
+  }
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(showCopied).catch(() => {
+      textarea.select();
+      document.execCommand('copy');
+      showCopied();
+    });
+  } else {
+    textarea.select();
+    document.execCommand('copy');
+    showCopied();
+  }
+});
+
+loadData();
+</script>
+
+
+<script>
+/* ---- Date-in-words labels (shared across all pages) ----
+   Every <input type="date"> gets a small red label right after it that
+   writes the selected date out in words -- e.g. "8 July 2026" -- so a
+   date like 08/07 can never be misread as August 7 (American style).
+   You still pick the date in the box exactly as before; this only
+   changes what's DISPLAYED, never what's saved to the sheet.
+   Handles date boxes created later (e.g. the Return picker on Bikes
+   Status) via a DOM observer, and values set by code (prefills,
+   defaults) via a light polling loop. */
+(function () {
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function dateWords(iso) {
+    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(iso || '');
+    if (!m) return '';
+    var monthIdx = parseInt(m[2], 10) - 1;
+    if (monthIdx < 0 || monthIdx > 11) return '';
+    return parseInt(m[3], 10) + ' ' + MONTHS[monthIdx] + ' ' + parseInt(m[1], 10);
+  }
+
+  function ensureLabel(inp) {
+    var el = inp.__dateWordsEl;
+    if (el && el.parentNode) return el;
+    el = document.createElement('span');
+    el.className = 'date-words-label';
+    el.style.cssText = 'display:inline-block;font-size:12.5px;font-weight:700;' +
+      'color:#C62828;margin-top:3px;margin-left:2px;line-height:1.25;white-space:nowrap;';
+    if (inp.nextSibling) {
+      inp.parentNode.insertBefore(el, inp.nextSibling);
+    } else {
+      inp.parentNode.appendChild(el);
+    }
+    inp.__dateWordsEl = el;
+    return el;
+  }
+
+  function refreshDateWordLabels() {
+    var inputs = document.querySelectorAll('input[type="date"]');
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      if (!inp.parentNode) continue;
+      var el = ensureLabel(inp);
+      var text = dateWords(inp.value);
+      if (el.textContent !== text) el.textContent = text;
+    }
+  }
+
+  // React immediately when the user picks/types a date.
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+
+  // Catch date boxes that get created after page load (re-rendered lists,
+  // pop-up pickers). refreshDateWordLabels is idempotent, so the observer
+  // re-firing on its own label insertions settles immediately.
+  if (window.MutationObserver) {
+    new MutationObserver(refreshDateWordLabels)
+      .observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  // Catch values set by code (defaults, prefills from other pages), which
+  // fire no events. A few date boxes at 2 checks/second costs nothing.
+  setInterval(refreshDateWordLabels, 500);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshDateWordLabels);
+  } else {
+    refreshDateWordLabels();
+  }
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Customer Record — Intake</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sand:#F5EFE6;
+    --ink:#1A2421;
+    --petrol:#0F3D3E;
+    --petrol-light:#175A5B;
+    --cone:#FF6B35;
+    --card:#FFFFFF;
+    --line:#DED4C2;
+    --ok:#2F855A;
+    --err:#C53030;
+    --warn:#B7791F;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--sand);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  .topbar{
+    background:var(--petrol);
+    padding:14px 16px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .topbar .brand{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    text-decoration:none;
+  }
+  .topbar .brand img{
+    width:28px; height:28px;
+    object-fit:contain;
+  }
+  .topbar .brand span{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    color:#fff;
+    letter-spacing:.02em;
+  }
+  .topbar nav{
+    display:flex;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+  .topbar nav a{
+    color:#CFE3E0;
+    text-decoration:none;
+    font-size:12.5px;
+    font-weight:500;
+    padding:3px 0;
+    border-bottom:2px solid transparent;
+  }
+  .topbar nav a:hover{ color:#fff; }
+  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
+  .page-head{
+    max-width:520px;
+    margin:0 auto;
+    padding:22px 16px 4px;
+  }
+  .page-head h1{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:26px;
+    color:var(--petrol);
+    margin:0;
+  }
+  .page-head .sub{
+    color:var(--muted);
+    font-size:13px;
+    margin-top:6px;
+  }
+  main{
+    max-width:520px;
+    margin:0 auto;
+    padding:20px 16px 60px;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:20px;
+    margin-bottom:16px;
+  }
+  .card h2{
+    font-family:'Barlow Condensed',sans-serif;
+    font-size:15px;
+    font-weight:600;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--petrol);
+    margin:0 0 14px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2::before{
+    content:"";
+    width:7px;height:7px;
+    border-radius:50%;
+    background:var(--cone);
+    display:inline-block;
+  }
+  label{
+    display:block;
+    font-size:12.5px;
+    font-weight:500;
+    color:#5A6663;
+    margin:14px 0 5px;
+  }
+  label:first-of-type{margin-top:0;}
+  .deal-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:14px;
+  }
+  .deal-row input[type="checkbox"]{
+    width:18px;
+    height:18px;
+    accent-color:var(--petrol);
+    cursor:pointer;
+  }
+  .deal-row label{
+    margin:0;
+    font-size:13.5px;
+    font-weight:600;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  input, select{
+    width:100%;
+    padding:11px 12px;
+    border:1px solid var(--line);
+    border-radius:9px;
+    font-size:15px;
+    font-family:'Inter',sans-serif;
+    background:#FBFAF7;
+    color:var(--ink);
+    transition:border-color .15s;
+  }
+  input:focus, select:focus{
+    outline:none;
+    border-color:var(--petrol-light);
+    background:#fff;
+  }
+  input:disabled, select:disabled{
+    background:#EEE9DE;
+    color:#A6ADA9;
+    cursor:not-allowed;
+  }
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .row2 > div{min-width:0;}
+  button{
+    width:100%;
+    padding:15px;
+    border:none;
+    border-radius:10px;
+    background:var(--cone);
+    color:#fff;
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:17px;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    cursor:pointer;
+    margin-top:20px;
+    transition:transform .1s, background .15s;
+  }
+  button:active{transform:scale(.98);}
+  button:disabled{background:#C9B9A8; cursor:not-allowed;}
+  .status{
+    margin-top:12px;
+    font-size:13.5px;
+    padding:10px 12px;
+    border-radius:8px;
+    display:none;
+  }
+  .status.ok{display:block; background:#E8F5EE; color:var(--ok); border:1px solid #BEE3CE;}
+  .status.err{display:block; background:#FCEBEB; color:var(--err); border:1px solid #F3C6C6;}
+  .status.warn{display:block; background:#FFF3E6; color:var(--warn); border:1px solid #F3D9B8;}
+  .setup{
+    background:#FBF6EC;
+    border:1px dashed var(--line);
+  }
+  .setup p{font-size:13px; color:#5A6663; margin:0 0 10px; line-height:1.5;}
+  .setup a{color:var(--petrol);}
+  .odo{
+    display:flex; align-items:center; justify-content:space-between;
+    font-family:'Barlow Condensed',sans-serif;
+    font-size:12.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:#7A8A86; margin-bottom:14px;
+  }
+  .odo b{color:var(--petrol); font-size:14px;}
+  .hidden{display:none;}
+  .link-btn{
+    background:none; border:none; color:var(--petrol); text-decoration:underline;
+    font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; text-transform:none;
+    letter-spacing:0; padding:0; margin-top:8px; width:auto;
+  }
+
+  .tabs{
+    display:flex; gap:8px;
+    max-width:520px; margin:0 auto; padding:14px 16px 0;
+  }
+  .tab-btn{
+    width:auto; flex:1; margin-top:0;
+    background:#fff; color:var(--petrol);
+    border:1px solid var(--line);
+    padding:11px;
+    font-size:13.5px; letter-spacing:.06em;
+  }
+  .tab-btn.active{
+    background:var(--petrol); color:#fff; border-color:var(--petrol);
+  }
+
+  .field{ position:relative; }
+  .ac-list{
+    position:absolute; left:0; right:0; top:100%;
+    background:#fff; border:1px solid var(--line); border-top:none;
+    border-radius:0 0 9px 9px;
+    max-height:220px; overflow-y:auto;
+    z-index:20; display:none;
+    box-shadow:0 8px 18px rgba(15,61,62,.1);
+  }
+  .ac-list.show{ display:block; }
+  .ac-item{
+    padding:10px 12px; font-size:14px; cursor:pointer;
+    border-bottom:1px solid #F0EBE0;
+  }
+  .ac-item:last-child{ border-bottom:none; }
+  .ac-item:hover, .ac-item.hi{ background:#F5EFE6; }
+  .ac-item mark{ background:#FFE3D2; color:var(--ink); border-radius:2px; }
+
+  .results{ margin-top:10px; }
+  .result-card{
+    border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; margin-bottom:10px; background:#FBFAF7;
+  }
+  .result-card .rc-title{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700;
+    font-size:16px; color:var(--petrol); margin-bottom:4px;
+  }
+  .result-card .rc-row{
+    font-size:12.5px; color:#5A6663; line-height:1.6;
+  }
+  .result-card .rc-row b{ color:var(--ink); font-weight:600; }
+  .results-empty{
+    font-size:13px; color:#8A948F; padding:14px 2px; text-align:center;
+  }
+  .results-count{
+    font-size:12px; color:#7A8A86; margin:12px 2px 0;
+    font-family:'Barlow Condensed',sans-serif; letter-spacing:.06em; text-transform:uppercase;
+  }
+  .search-clear{
+    margin-top:14px; background:#fff; color:var(--petrol);
+    border:1px solid var(--line);
+  }
+  .load-status{
+    font-size:12px; color:#B36A2E; background:#FFF3E6;
+    border:1px solid #F3D9B8; border-radius:7px;
+    padding:7px 10px; margin:-4px 0 12px;
+    display:none;
+  }
+  .load-status.show{ display:block; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="index.html">
+    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
+    <span>AA Scooter Rental</span>
+  </a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="customers.html" class="active">Customer Record</a>
+    <a href="pricing.html">Price Calculator</a>
+    <a href="parts.html">Parts &amp; Oil</a>
+    <a href="oilchange.html">Oil Change</a>
+    <a href="bikes.html">Bikes Status</a>
+    <a href="bikephotos.html">Bike Photos</a>
+    <a href="available-bikes.html">Available Bikes</a>
+    <a href="accounts.html">Accounts</a>
+  </nav>
+</div>
+
+<div class="page-head">
+  <h1>Customer Record</h1>
+  <div class="sub">Adds a row straight into the "customer" tab</div>
+</div>
+
+<div class="tabs">
+  <button type="button" class="tab-btn active" id="tabAdd">＋ Add new</button>
+  <button type="button" class="tab-btn" id="tabSearch">🔍 Search</button>
+</div>
+
+<main>
+
+  <form id="intakeForm">
+    <div class="card">
+      <div class="odo">Session entries <b id="sessionCount">0</b></div>
+      <h2>Customer</h2>
+      <label for="name">Name</label>
+      <input id="name" required placeholder="Mr. Christian Jay Verona">
+
+      <label for="nationality">Nationality</label>
+      <div class="field">
+        <input id="nationality" placeholder="Start typing or click for the list…" autocomplete="off">
+        <div class="ac-list" data-for="nationality"></div>
+      </div>
+
+      <label for="passport">Passport number</label>
+      <input id="passport" placeholder="Optional">
+
+      <label for="contact">How to contact them</label>
+      <select id="contact">
+        <option value=""></option>
+        <option value="WhatsApp">WhatsApp</option>
+        <option value="Messenger">Messenger</option>
+        <option value="Phone">Phone</option>
+        <option value="Line">Line</option>
+        <option value="other">Other…</option>
+      </select>
+      <input id="contactOther" placeholder="Enter contact method" class="hidden" style="margin-top:8px;">
+    </div>
+
+    <div class="card">
+      <h2>Rental</h2>
+      <label for="bikeModel">Bike model</label>
+      <div class="field">
+        <input id="bikeModel" required placeholder="GT red 2" autocomplete="off">
+        <div class="ac-list" data-for="bikeModel"></div>
+      </div>
+      <div class="load-status" id="bikeModelLoadStatus">Loading bikes…</div>
+
+      <div class="row2">
+        <div>
+          <label for="rentingDateFrom">Renting from</label>
+          <input id="rentingDateFrom" type="date" required>
+        </div>
+        <div>
+          <label for="returnDate">Return date</label>
+          <input id="returnDate" type="date" required>
+        </div>
+      </div>
+      <div class="row2">
+        <div>
+          <label for="returnTime">Return time</label>
+          <input id="returnTime" type="time">
+        </div>
+        <div>
+          <label for="deliverToHotel">Deliver to hotel</label>
+          <select id="deliverToHotel">
+            <option value="">—</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Payment</h2>
+      <div class="row2">
+        <div>
+          <label for="totalPrice">Total price (฿)</label>
+          <input id="totalPrice" type="number" min="0" step="1" placeholder="2500">
+        </div>
+        <div>
+          <label for="paidBy">Paid by</label>
+          <select id="paidBy">
+            <option value=""></option>
+            <option value="cash">Cash</option>
+            <option value="scan">Scan</option>
+            <option value="wise">Wise</option>
+            <option value="revolut">Revolut</option>
+          </select>
+        </div>
+      </div>
+      <div class="deal-row">
+        <input type="checkbox" id="dealCheckbox">
+        <label for="dealCheckbox">Deal</label>
+      </div>
+      <div id="depositSection">
+        <div class="deal-row">
+          <input type="checkbox" id="depositCheckbox">
+          <label for="depositCheckbox">Deposit</label>
+        </div>
+        <select id="depositMethod" disabled style="margin-top:8px;">
+          <option value="">Select deposit method</option>
+          <option value="Cash">Cash</option>
+          <option value="Scan">Scan</option>
+          <option value="Wise">Wise</option>
+          <option value="Revolut">Revolut</option>
+          <option value="Passport">Passport</option>
+        </select>
+        <input id="depositAmount" type="number" min="0" step="1" placeholder="Deposit amount (฿)" class="hidden" style="margin-top:8px;">
+      </div>
+      <div class="load-status" id="depositSkipNote" style="margin-top:8px;">No deposit needed — this is a rental extension, not a new rental.</div>
+    </div>
+
+
+    <button type="submit" id="submitBtn">Add to sheet</button>
+    <div class="status" id="statusBox"></div>
+  </form>
+
+  <div id="searchView" class="hidden">
+    <div class="card">
+      <h2>Find a record</h2>
+      <div class="load-status" id="loadStatus">Loading records…</div>
+
+      <label for="s_name">Name</label>
+      <div class="field">
+        <input id="s_name" data-key="name" autocomplete="off" placeholder="Start typing…">
+        <div class="ac-list" data-for="s_name"></div>
+      </div>
+
+      <label for="s_nationality">Nationality</label>
+      <div class="field">
+        <input id="s_nationality" data-key="nationality" autocomplete="off" placeholder="Start typing…">
+        <div class="ac-list" data-for="s_nationality"></div>
+      </div>
+
+      <label for="s_passport">Passport number</label>
+      <div class="field">
+        <input id="s_passport" data-key="passport" autocomplete="off" placeholder="Start typing…">
+        <div class="ac-list" data-for="s_passport"></div>
+      </div>
+
+      <label for="s_contact">Contact method</label>
+      <div class="field">
+        <input id="s_contact" data-key="contact" autocomplete="off" placeholder="Start typing…">
+        <div class="ac-list" data-for="s_contact"></div>
+      </div>
+
+      <label for="s_bikeModel">Bike model</label>
+      <div class="field">
+        <input id="s_bikeModel" data-key="bikeModel" autocomplete="off" placeholder="e.g. GT">
+        <div class="ac-list" data-for="s_bikeModel"></div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <label for="s_rentingDateFrom">Renting from</label>
+          <div class="field">
+            <input id="s_rentingDateFrom" data-key="rentingDateFrom" autocomplete="off" placeholder="dd/mm/yyyy">
+            <div class="ac-list" data-for="s_rentingDateFrom"></div>
+          </div>
+        </div>
+        <div>
+          <label for="s_returnDate">Return date</label>
+          <div class="field">
+            <input id="s_returnDate" data-key="returnDate" autocomplete="off" placeholder="dd/mm/yyyy">
+            <div class="ac-list" data-for="s_returnDate"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <label for="s_deliverToHotel">Deliver to hotel</label>
+          <div class="field">
+            <input id="s_deliverToHotel" data-key="deliverToHotel" autocomplete="off" placeholder="Yes / No">
+            <div class="ac-list" data-for="s_deliverToHotel"></div>
+          </div>
+        </div>
+        <div>
+          <label for="s_paidBy">Paid by</label>
+          <div class="field">
+            <input id="s_paidBy" data-key="paidBy" autocomplete="off" placeholder="cash / scan…">
+            <div class="ac-list" data-for="s_paidBy"></div>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="search-clear" id="clearSearch">Clear fields</button>
+    </div>
+
+    <div class="card">
+      <h2>Results</h2>
+      <div class="results-count" id="resultsCount"></div>
+      <div class="results" id="resultsBox">
+        <div class="results-empty">Type into any field above to search.</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
+let sessionCount = 0;
+
+const form = document.getElementById('intakeForm');
+const statusBox = document.getElementById('statusBox');
+const submitBtn = document.getElementById('submitBtn');
+
+// Tracks whether the entry currently in the form is a normal walk-in add
+// ("direct") or was auto-populated by the "Extend" flow on Bikes Status
+// ("extend"). Sent to the backend so the monthly/cash sheet rows read
+// "<bike> extend N days" instead of "<bike> rent N days", and so the
+// security deposit section (never applicable to an extension) stays out
+// of the way. Resets back to "direct" after each successful save, since
+// only the row the redirect prefilled should be marked as an extension.
+let entrySource = 'direct';
+
+function setDepositSectionVisible(visible) {
+  const section = document.getElementById('depositSection');
+  const note = document.getElementById('depositSkipNote');
+  if (visible) {
+    section.classList.remove('hidden');
+    note.classList.remove('show');
+  } else {
+    depositCheckbox.checked = false;
+    depositMethod.disabled = true;
+    depositMethod.value = '';
+    depositAmount.classList.add('hidden');
+    depositAmount.required = false;
+    depositAmount.value = '';
+    section.classList.add('hidden');
+    note.classList.add('show');
+  }
+}
+
+function setDefaultsToNow() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const dateStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+  const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  document.getElementById('rentingDateFrom').value = dateStr;
+  document.getElementById('returnTime').value = timeStr;
+}
+
+const contactSelect = document.getElementById('contact');
+const contactOther = document.getElementById('contactOther');
+contactSelect.addEventListener('change', () => {
+  if (contactSelect.value === 'other') {
+    contactOther.classList.remove('hidden');
+    contactOther.required = true;
+  } else {
+    contactOther.classList.add('hidden');
+    contactOther.required = false;
+    contactOther.value = '';
+  }
+});
+
+const depositCheckbox = document.getElementById('depositCheckbox');
+const depositMethod = document.getElementById('depositMethod');
+const depositAmount = document.getElementById('depositAmount');
+const DEPOSIT_METHODS_NEEDING_AMOUNT = ['Scan', 'Wise', 'Revolut'];
+
+function refreshDepositAmountVisibility() {
+  const needsAmount = depositCheckbox.checked && DEPOSIT_METHODS_NEEDING_AMOUNT.includes(depositMethod.value);
+  if (needsAmount) {
+    depositAmount.classList.remove('hidden');
+    depositAmount.required = true;
+  } else {
+    depositAmount.classList.add('hidden');
+    depositAmount.required = false;
+    depositAmount.value = '';
+  }
+}
+
+depositCheckbox.addEventListener('change', () => {
+  depositMethod.disabled = !depositCheckbox.checked;
+  if (!depositCheckbox.checked) {
+    depositMethod.value = '';
+  }
+  refreshDepositAmountVisibility();
+});
+depositMethod.addEventListener('change', refreshDepositAmountVisibility);
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  statusBox.className = 'status';
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Saving…';
+
+  const rentingDateFrom = document.getElementById('rentingDateFrom').value;
+  const returnDate = document.getElementById('returnDate').value;
+  const totalPrice = document.getElementById('totalPrice').value;
+  const baseContact = contactSelect.value === 'other' ? contactOther.value.trim() : contactSelect.value;
+
+  function computeDays(fromStr, toStr) {
+    if (!fromStr || !toStr) return null;
+    const from = new Date(fromStr + 'T00:00:00');
+    const to = new Date(toStr + 'T00:00:00');
+    const diff = Math.round((to - from) / 86400000);
+    return diff > 0 ? diff : 1;
+  }
+
+  const days = computeDays(rentingDateFrom, returnDate);
+  const isDeal = document.getElementById('dealCheckbox').checked;
+  let contactWithDetails = baseContact;
+  if (baseContact && totalPrice && days) {
+    contactWithDetails = baseContact + ' (' + totalPrice + ', ' + days + (days === 1 ? ' day' : ' days') + ')' + (isDeal ? ' Deal' : '');
+  }
+
+  const payload = {
+    name: document.getElementById('name').value.trim(),
+    nationality: document.getElementById('nationality').value.trim(),
+    passport: document.getElementById('passport').value.trim(),
+    contact: contactWithDetails,
+    bikeModel: document.getElementById('bikeModel').value.trim(),
+    rentingDateFrom: rentingDateFrom,
+    returnDate: returnDate,
+    returnTime: document.getElementById('returnTime').value,
+    deliverToHotel: document.getElementById('deliverToHotel').value,
+    totalPrice: totalPrice,
+    paidBy: document.getElementById('paidBy').value,
+    deposit: depositCheckbox.checked ? depositMethod.value : '',
+    depositAmount: (depositCheckbox.checked && DEPOSIT_METHODS_NEEDING_AMOUNT.includes(depositMethod.value)) ? depositAmount.value : '',
+    source: entrySource
+  };
+
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (data.warning) {
+        statusBox.textContent = 'Added — "' + payload.name + '" saved, but: ' + data.warning;
+        statusBox.className = 'status warn';
+      } else {
+        // checksTotal/checksPassed come from the server's post-write
+        // verification: it re-reads every cell it wrote (customer row,
+        // monthly income row, cash row, bikes total, deposit cells) and
+        // confirms each landed correctly.
+        const checksNote = data.checksTotal
+          ? ' ✓ Verified: ' + data.checksPassed + '/' + data.checksTotal + ' write-back checks passed.'
+          : '';
+        statusBox.textContent = 'Added — "' + payload.name + '" saved to the sheet.' + checksNote;
+        statusBox.className = 'status ok';
+      }
+      sessionCount++;
+      document.getElementById('sessionCount').textContent = sessionCount;
+      form.reset();
+      contactOther.classList.add('hidden');
+      contactOther.required = false;
+      depositMethod.disabled = true;
+      depositMethod.required = false;
+      depositAmount.classList.add('hidden');
+      depositAmount.required = false;
+      entrySource = 'direct';
+      setDepositSectionVisible(true);
+      setDefaultsToNow();
+    } else {
+      throw new Error(data.error || 'Unknown error');
+    }
+  } catch (err) {
+    statusBox.textContent = 'Could not save: ' + err.message;
+    statusBox.className = 'status err';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Add to sheet';
+  }
+});
+
+setDefaultsToNow();
+
+// ---- Prefill from a redirect (e.g. the "Extend" flow on Bikes Status,
+// which closes out a long-extension booking and sends the customer here
+// to start a fresh rental record for the new period). Query params
+// override the "now" defaults set above where present. ----
+function prefillFromQueryParams() {
+  const qp = new URLSearchParams(window.location.search);
+  if (![...qp.keys()].length) return;
+
+  const setVal = (id, key) => {
+    if (qp.has(key)) document.getElementById(id).value = qp.get(key) || '';
+  };
+
+  setVal('name', 'name');
+  setVal('nationality', 'nationality');
+  setVal('passport', 'passport');
+  setVal('bikeModel', 'bikeModel');
+  setVal('rentingDateFrom', 'rentingDateFrom');
+  setVal('returnDate', 'returnDate');
+  setVal('returnTime', 'returnTime');
+  setVal('deliverToHotel', 'deliverToHotel');
+  setVal('totalPrice', 'totalPrice');
+  setVal('paidBy', 'paidBy');
+
+  // Contact is a <select> plus a free-text "other" fallback — try to match
+  // the incoming value to one of the fixed options, otherwise drop it into
+  // the "Other…" field so nothing gets silently lost.
+  if (qp.has('contact')) {
+    const raw = qp.get('contact') || '';
+    // Strip off the "(price, N days) Deal" suffix this app itself appends
+    // when it originally saved this contact value, so re-editing doesn't
+    // double it up.
+    const baseContact = raw.replace(/\s*\([^()]*\)(?:\s*Deal)?\s*$/i, '').trim();
+    const knownValues = Array.from(contactSelect.options).map(o => o.value);
+    if (baseContact && knownValues.includes(baseContact)) {
+      contactSelect.value = baseContact;
+    } else if (baseContact) {
+      contactSelect.value = 'other';
+      contactOther.classList.remove('hidden');
+      contactOther.required = true;
+      contactOther.value = baseContact;
+    }
+  }
+
+  if (qp.get('source') === 'extend') {
+    entrySource = 'extend';
+    setDepositSectionVisible(false);
+    statusBox.textContent = 'Prefilled from an extended rental — no deposit needed here. Check the details, then save.';
+  } else {
+    statusBox.textContent = 'Prefilled from an extended rental — check the details, then save.';
+  }
+  statusBox.className = 'status ok';
+}
+
+prefillFromQueryParams();
+
+/* ---------------- Search / autocomplete ---------------- */
+
+const tabAdd = document.getElementById('tabAdd');
+const tabSearch = document.getElementById('tabSearch');
+const searchView = document.getElementById('searchView');
+
+let sheetRows = null;      // cached rows from the sheet
+let rowsPromise = null;    // in-flight fetch
+
+const searchKeys = ['name','nationality','passport','contact','bikeModel',
+                     'rentingDateFrom','returnDate','deliverToHotel','paidBy'];
+
+function setLoadStatus(msg) {
+  const el = document.getElementById('loadStatus');
+  if (!msg) { el.classList.remove('show'); return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function loadRows() {
+  if (rowsPromise) return rowsPromise;
+  setLoadStatus('Loading records…');
+  rowsPromise = fetch(scriptUrl)
+    .then(res => res.json())
+    .then(data => {
+      if (!data.success) throw new Error(data.error || 'Could not load data');
+      sheetRows = data.rows;
+      setLoadStatus(null);
+      return sheetRows;
+    })
+    .catch(err => {
+      setLoadStatus('Could not load records: ' + err.message + ' — tap Search again to retry.');
+      rowsPromise = null; // allow retry
+      return [];
+    });
+  return rowsPromise;
+}
+
+// Start fetching immediately on page load, so data is likely ready
+// by the time the person switches to the Search tab.
+loadRows();
+
+// ---- Canonical bike list (from the Parts & Oil sheet) for the main
+// "Bike model" field, so staff pick from the real list instead of
+// free-typing a name that might not match (typos, missing digits, etc).
+// Mirrors the search box on the Bikes Status page: shows "Loading bikes…"
+// until the list arrives, then narrows suggestions as you type. ----
+let bikeNames = [];
+let bikeNamesPromise = null;
+
+// Bike Tax category rows (make/model/plate/etc.), fetched alongside the
+// bike list so plate numbers can be matched onto search results without a
+// separate round trip.
+let bikeTaxRows = [];
+
+function setBikeModelLoadStatus(msg) {
+  const el = document.getElementById('bikeModelLoadStatus');
+  if (!msg) { el.classList.remove('show'); return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function loadBikeNames() {
+  if (bikeNamesPromise) return bikeNamesPromise;
+  setBikeModelLoadStatus('Loading bikes…');
+  bikeNamesPromise = fetch(scriptUrl + '?action=parts')
+    .then(res => res.json())
+    .then(data => {
+      if (!data.success) throw new Error(data.error || 'Could not load bike list');
+      const bikeHeader = data.headers[0];
+      bikeNames = data.rows
+        .map(r => (r[bikeHeader] || '').toString().trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      bikeTaxRows = data.categoryRows || [];
+      setBikeModelLoadStatus(null);
+      renderResults();
+      return bikeNames;
+    })
+    .catch(err => {
+      setBikeModelLoadStatus('Could not load bike list: ' + err.message);
+      bikeNamesPromise = null;
+      return [];
+    });
+  return bikeNamesPromise;
+}
+
+loadBikeNames();
+
+// Finds the plate number for a customer record's bike text by fuzzy-
+// matching it against the Bike Tax sheet's bike names. Returns '' if the
+// plate data hasn't loaded yet or no match is found, rather than throwing.
+function plateForBike(bikeModelText) {
+  if (!bikeModelText || !bikeTaxRows.length) return '';
+  const match = bikeTaxRows.find(r => bikeNamesMatch(r.bike, bikeModelText));
+  return match ? (match.plate || '') : '';
+}
+
+function attachBikeModelAutocomplete() {
+  const input = document.getElementById('bikeModel');
+  const list = document.querySelector('.ac-list[data-for="bikeModel"]');
+  let hiIndex = -1;
+
+  function close() {
+    list.classList.remove('show');
+    list.innerHTML = '';
+    hiIndex = -1;
+  }
+
+  function open(query) {
+    const options = bikeNames.filter(v => tokenMatch(v, query)).slice(0, 8);
+    if (!query || options.length === 0) { close(); return; }
+    list.innerHTML = options.map((v, i) =>
+      `<div class="ac-item" data-index="${i}">${highlight(v, query)}</div>`
+    ).join('');
+    list.classList.add('show');
+    hiIndex = -1;
+    Array.from(list.children).forEach((el, i) => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        input.value = options[i];
+        close();
+      });
+    });
+    list._options = options;
+  }
+
+  input.addEventListener('input', () => open(input.value.trim()));
+  input.addEventListener('focus', () => open(input.value.trim()));
+
+  input.addEventListener('keydown', (e) => {
+    const items = Array.from(list.children);
+    if (e.key === 'Enter') {
+      // Enter confirms the current text (list is already narrowed live)
+      // and closes the suggestion dropdown, same as Bikes Status.
+      e.preventDefault();
+      if (hiIndex >= 0 && list._options) {
+        input.value = list._options[hiIndex];
+      }
+      close();
+      return;
+    }
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      hiIndex = Math.min(hiIndex + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      hiIndex = Math.max(hiIndex - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !list.contains(e.target)) close();
+  });
+}
+
+attachBikeModelAutocomplete();
+
+/* ---------------- Nationality (country) dropdown ---------------- */
+
+const COUNTRIES = [
+  'Afghanistan','Albania','Algeria','American Samoa','Andorra','Angola','Anguilla',
+  'Antigua and Barbuda','Argentina','Armenia','Aruba','Australia','Austria',
+  'Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium',
+  'Belize','Benin','Bermuda','Bhutan','Bolivia','Bosnia and Herzegovina',
+  'Botswana','Brazil','British Virgin Islands','Brunei','Bulgaria','Burkina Faso',
+  'Burundi','Cambodia','Cameroon','Canada','Cape Verde','Cayman Islands',
+  'Central African Republic','Chad','Chile','China','Colombia','Comoros',
+  'Congo - Brazzaville','Congo - Kinshasa','Cook Islands','Costa Rica',
+  "Côte d'Ivoire",'Croatia','Cuba','Curaçao','Cyprus','Czechia','Denmark',
+  'Djibouti','Dominica','Dominican Republic','Ecuador','Egypt','El Salvador',
+  'Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Falkland Islands',
+  'Faroe Islands','Fiji','Finland','France','French Guiana','French Polynesia',
+  'Gabon','Gambia','Georgia','Germany','Ghana','Gibraltar','Greece','Greenland',
+  'Grenada','Guadeloupe','Guam','Guatemala','Guernsey','Guinea','Guinea-Bissau',
+  'Guyana','Haiti','Honduras','Hong Kong','Hungary','Iceland','India','Indonesia',
+  'Iran','Iraq','Ireland','Isle of Man','Israel','Italy','Jamaica','Japan',
+  'Jersey','Jordan','Kazakhstan','Kenya','Kiribati','Kosovo','Kuwait','Kyrgyzstan',
+  'Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein',
+  'Lithuania','Luxembourg','Macao','Madagascar','Malawi','Malaysia','Maldives',
+  'Mali','Malta','Marshall Islands','Martinique','Mauritania','Mauritius',
+  'Mayotte','Mexico','Micronesia','Moldova','Monaco','Mongolia','Montenegro',
+  'Montserrat','Morocco','Mozambique','Myanmar (Burma)','Namibia','Nauru',
+  'Nepal','Netherlands','New Caledonia','New Zealand','Nicaragua','Niger',
+  'Nigeria','Niue','North Korea','North Macedonia','Norway','Oman','Pakistan',
+  'Palau','Palestinian Territories','Panama','Papua New Guinea','Paraguay',
+  'Peru','Philippines','Pitcairn Islands','Poland','Portugal','Puerto Rico',
+  'Qatar','Réunion','Romania','Russia','Rwanda','Samoa','San Marino',
+  'São Tomé and Príncipe','Saudi Arabia','Senegal','Serbia','Seychelles',
+  'Sierra Leone','Singapore','Sint Maarten','Slovakia','Slovenia',
+  'Solomon Islands','Somalia','South Africa','South Korea','South Sudan',
+  'Spain','Sri Lanka','St. Kitts and Nevis','St. Lucia','St. Vincent and the Grenadines',
+  'Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan',
+  'Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago',
+  'Tunisia','Turkey','Turkmenistan','Turks and Caicos Islands','Tuvalu',
+  'Uganda','Ukraine','United Arab Emirates','United Kingdom','United States',
+  'Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam',
+  'Wallis and Futuna','Western Sahara','Yemen','Zambia','Zimbabwe'
+];
+
+function attachCountryAutocomplete(inputId) {
+  const input = document.getElementById(inputId);
+  const list = document.querySelector('.ac-list[data-for="' + inputId + '"]');
+  if (!input || !list) return;
+  let hiIndex = -1;
+
+  function close() {
+    list.classList.remove('show');
+    list.innerHTML = '';
+    hiIndex = -1;
+  }
+
+  function open(query) {
+    const options = (query ? COUNTRIES.filter(v => tokenMatch(v, query)) : COUNTRIES).slice(0, 60);
+    if (!options.length) { close(); return; }
+    list.innerHTML = options.map((v, i) =>
+      `<div class="ac-item" data-index="${i}">${highlight(v, query || '')}</div>`
+    ).join('');
+    list.classList.add('show');
+    hiIndex = -1;
+    Array.from(list.children).forEach((el, i) => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        input.value = options[i];
+        close();
+      });
+    });
+    list._options = options;
+  }
+
+  input.addEventListener('input', () => open(input.value.trim()));
+  input.addEventListener('focus', () => open(input.value.trim()));
+
+  input.addEventListener('keydown', (e) => {
+    const items = Array.from(list.children);
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (hiIndex >= 0 && list._options) {
+        input.value = list._options[hiIndex];
+      }
+      close();
+      return;
+    }
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      hiIndex = Math.min(hiIndex + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+      items[hiIndex] && items[hiIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      hiIndex = Math.max(hiIndex - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+      items[hiIndex] && items[hiIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !list.contains(e.target)) close();
+  });
+}
+
+attachCountryAutocomplete('nationality');
+
+tabAdd.addEventListener('click', () => {
+  tabAdd.classList.add('active');
+  tabSearch.classList.remove('active');
+  form.classList.remove('hidden');
+  searchView.classList.add('hidden');
+});
+
+tabSearch.addEventListener('click', () => {
+  tabSearch.classList.add('active');
+  tabAdd.classList.remove('active');
+  form.classList.add('hidden');
+  searchView.classList.remove('hidden');
+  loadRows().then(() => renderResults());
+});
+
+// Case-insensitive, multi-word "contains all tokens" matcher
+// Same fuzzy bike-name matching used on the Bikes Status page, so a plate
+// number can be looked up even when the customer record's bike text isn't
+// an exact match for the Bike Tax sheet's name (extra words, parentheses,
+// case differences, etc).
+function normalizeBikeName(s) {
+  return (s || '').toString()
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+// Words/numerals used to tell apart otherwise-identical bike names that are
+// actually different bikes — e.g. "Gran Filano" and "Gran Filano Two" are
+// two separate bikes, not a loose match of the same one.
+const DISTINGUISHING_SUFFIXES = new Set([
+  'one','two','three','four','five','six','seven','eight','nine','ten',
+  'i','ii','iii','iv','v','vi','vii','viii','ix','x',
+  '1','2','3','4','5','6','7','8','9','10'
+]);
+
+function bikeNamesMatch(a, b) {
+  const na = normalizeBikeName(a);
+  const nb = normalizeBikeName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+
+  const ta = na.split(' ');
+  const tb = nb.split(' ');
+  const shorter = ta.length <= tb.length ? ta : tb;
+  const longer = ta.length <= tb.length ? tb : ta;
+
+  // Fuzzy match allowed when the shorter name is a clean word-for-word
+  // prefix of the longer one — UNLESS the extra trailing word(s) are a
+  // distinguishing number/ordinal, in which case it's a different bike.
+  const isPrefix = shorter.every((tok, i) => tok === longer[i]);
+  if (isPrefix) {
+    const extra = longer.slice(shorter.length);
+    if (extra.some(t => DISTINGUISHING_SUFFIXES.has(t))) return false;
+    return true;
+  }
+
+  return na.includes(nb) || nb.includes(na);
+}
+
+function tokenMatch(value, query) {
+  if (!query) return true;
+  const v = (value || '').toString().toLowerCase();
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return tokens.every(t => v.includes(t));
+}
+
+function highlight(value, query) {
+  let out = String(value || '');
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  tokens.forEach(t => {
+    if (!t) return;
+    const re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
+    out = out.replace(re, '<mark>$1</mark>');
+  });
+  return out;
+}
+
+function uniqueValuesFor(key) {
+  if (!sheetRows) return [];
+  const seen = new Set();
+  const out = [];
+  sheetRows.forEach(r => {
+    const v = (r[key] || '').toString().trim();
+    if (v && !seen.has(v.toLowerCase())) {
+      seen.add(v.toLowerCase());
+      out.push(v);
+    }
+  });
+  return out;
+}
+
+function getSearchValues() {
+  const vals = {};
+  searchKeys.forEach(k => {
+    vals[k] = document.getElementById('s_' + k).value.trim();
+  });
+  return vals;
+}
+
+function parseFlexibleDate(str) {
+  str = String(str).trim();
+  var slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashMatch) {
+    var d = parseInt(slashMatch[1], 10), m = parseInt(slashMatch[2], 10) - 1, y = parseInt(slashMatch[3], 10);
+    var dt = new Date(y, m, d);
+    if (!isNaN(dt.getTime())) return dt;
+  }
+  var dt2 = new Date(str);
+  if (!isNaN(dt2.getTime())) return dt2;
+  return null;
+}
+
+function formatDateDisplay(str) {
+  if (!str) return '—';
+  var date = parseFlexibleDate(str);
+  if (!date) return str;
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function formatTimeDisplay(str) {
+  if (!str) return '—';
+  str = String(str).trim();
+  var hmMatch = str.match(/^(\d{1,2}):(\d{2})$/);
+  var h, min;
+  if (hmMatch) {
+    h = parseInt(hmMatch[1], 10);
+    min = hmMatch[2];
+  } else {
+    var dt = new Date(str);
+    if (isNaN(dt.getTime())) return str;
+    h = dt.getHours();
+    min = String(dt.getMinutes()).padStart(2, '0');
+  }
+  var period = h >= 12 ? 'PM' : 'AM';
+  var h12 = h % 12;
+  if (h12 === 0) h12 = 12;
+  return h12 + ':' + min + ' ' + period;
+}
+
+function renderResults() {
+  const box = document.getElementById('resultsBox');
+  const countEl = document.getElementById('resultsCount');
+  const vals = getSearchValues();
+  const activeKeys = searchKeys.filter(k => vals[k]);
+
+  if (!sheetRows) {
+    box.innerHTML = '<div class="results-empty">Loading records…</div>';
+    countEl.textContent = '';
+    return;
+  }
+  if (activeKeys.length === 0) {
+    box.innerHTML = '<div class="results-empty">Type into any field above to search.</div>';
+    countEl.textContent = '';
+    return;
+  }
+
+  const matches = sheetRows.filter(row =>
+    activeKeys.every(k => tokenMatch(row[k], vals[k]))
+  );
+
+  countEl.textContent = matches.length + (matches.length === 1 ? ' match' : ' matches');
+
+  if (matches.length === 0) {
+    box.innerHTML = '<div class="results-empty">No matching records.</div>';
+    return;
+  }
+
+  box.innerHTML = matches.slice(0, 60).map(r => `
+    <div class="result-card">
+      <div class="rc-title">${highlight(r.name, vals.name)} — ${highlight(r.bikeModel, vals.bikeModel)}</div>
+      <div class="rc-row"><b>Plate no.:</b> ${plateForBike(r.bikeModel) || '—'}</div>
+      <div class="rc-row"><b>Nationality:</b> ${highlight(r.nationality, vals.nationality) || '—'} &nbsp; <b>Passport:</b> ${highlight(r.passport, vals.passport) || '—'}</div>
+      <div class="rc-row"><b>Contact:</b> ${highlight(r.contact, vals.contact) || '—'}</div>
+      <div class="rc-row"><b>Rented:</b> ${formatDateDisplay(r.rentingDateFrom)}</div>
+      <div class="rc-row"><b>Return:</b> ${formatDateDisplay(r.returnDate)}</div>
+      <div class="rc-row"><b>Return time:</b> ${formatTimeDisplay(r.returnTime)}</div>
+      <div class="rc-row"><b>Deliver to hotel:</b> ${highlight(r.deliverToHotel, vals.deliverToHotel) || '—'} &nbsp; <b>Paid:</b> ${r.totalPrice ? '฿' + r.totalPrice : '—'} via ${highlight(r.paidBy, vals.paidBy) || '—'}</div>
+    </div>
+  `).join('');
+}
+
+function attachAutocomplete(key) {
+  const input = document.getElementById('s_' + key);
+  const list = document.querySelector('.ac-list[data-for="s_' + key + '"]');
+  let hiIndex = -1;
+
+  function close() {
+    list.classList.remove('show');
+    list.innerHTML = '';
+    hiIndex = -1;
+  }
+
+  function open(query) {
+    const options = uniqueValuesFor(key)
+      .filter(v => tokenMatch(v, query))
+      .slice(0, 8);
+    if (options.length === 0) { close(); return; }
+    list.innerHTML = options.map((v, i) =>
+      `<div class="ac-item" data-index="${i}">${highlight(v, query)}</div>`
+    ).join('');
+    list.classList.add('show');
+    hiIndex = -1;
+    Array.from(list.children).forEach((el, i) => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        input.value = options[i];
+        close();
+        renderResults();
+      });
+    });
+    list._options = options;
+  }
+
+  input.addEventListener('input', () => {
+    if (!sheetRows) return;
+    open(input.value.trim());
+    renderResults();
+  });
+
+  input.addEventListener('focus', () => {
+    if (sheetRows) open(input.value.trim());
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const items = Array.from(list.children);
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      hiIndex = Math.min(hiIndex + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      hiIndex = Math.max(hiIndex - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+    } else if (e.key === 'Enter' && hiIndex >= 0) {
+      e.preventDefault();
+      input.value = list._options[hiIndex];
+      close();
+      renderResults();
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !list.contains(e.target)) close();
+  });
+}
+
+searchKeys.forEach(attachAutocomplete);
+
+document.getElementById('clearSearch').addEventListener('click', () => {
+  searchKeys.forEach(k => document.getElementById('s_' + k).value = '');
+  renderResults();
+});
+</script>
+
+
+<script>
+/* ---- Date-in-words labels (shared across all pages) ----
+   Every <input type="date"> gets a small red label right after it that
+   writes the selected date out in words -- e.g. "8 July 2026" -- so a
+   date like 08/07 can never be misread as August 7 (American style).
+   You still pick the date in the box exactly as before; this only
+   changes what's DISPLAYED, never what's saved to the sheet.
+   Handles date boxes created later (e.g. the Return picker on Bikes
+   Status) via a DOM observer, and values set by code (prefills,
+   defaults) via a light polling loop. */
+(function () {
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function dateWords(iso) {
+    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(iso || '');
+    if (!m) return '';
+    var monthIdx = parseInt(m[2], 10) - 1;
+    if (monthIdx < 0 || monthIdx > 11) return '';
+    return parseInt(m[3], 10) + ' ' + MONTHS[monthIdx] + ' ' + parseInt(m[1], 10);
+  }
+
+  function ensureLabel(inp) {
+    var el = inp.__dateWordsEl;
+    if (el && el.parentNode) return el;
+    el = document.createElement('span');
+    el.className = 'date-words-label';
+    el.style.cssText = 'display:inline-block;font-size:12.5px;font-weight:700;' +
+      'color:#C62828;margin-top:3px;margin-left:2px;line-height:1.25;white-space:nowrap;';
+    if (inp.nextSibling) {
+      inp.parentNode.insertBefore(el, inp.nextSibling);
+    } else {
+      inp.parentNode.appendChild(el);
+    }
+    inp.__dateWordsEl = el;
+    return el;
+  }
+
+  function refreshDateWordLabels() {
+    var inputs = document.querySelectorAll('input[type="date"]');
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      if (!inp.parentNode) continue;
+      var el = ensureLabel(inp);
+      var text = dateWords(inp.value);
+      if (el.textContent !== text) el.textContent = text;
+    }
+  }
+
+  // React immediately when the user picks/types a date.
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+
+  // Catch date boxes that get created after page load (re-rendered lists,
+  // pop-up pickers). refreshDateWordLabels is idempotent, so the observer
+  // re-firing on its own label insertions settles immediately.
+  if (window.MutationObserver) {
+    new MutationObserver(refreshDateWordLabels)
+      .observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  // Catch values set by code (defaults, prefills from other pages), which
+  // fire no events. A few date boxes at 2 checks/second costs nothing.
+  setInterval(refreshDateWordLabels, 500);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshDateWordLabels);
+  } else {
+    refreshDateWordLabels();
+  }
+})();
+</script>
+
+</body>
+</html>

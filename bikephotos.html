@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bike Photos — AA Scooters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sand:#F5EFE6;
+    --ink:#1A2421;
+    --petrol:#0F3D3E;
+    --petrol-light:#175A5B;
+    --cone:#FF6B35;
+    --card:#FFFFFF;
+    --line:#DED4C2;
+    --muted:#5A6663;
+    --ok:#2F855A;
+    --err:#C53030;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--sand); color:var(--ink);
+    font-family:'Inter',sans-serif; min-height:100vh;
+  }
+  .topbar{
+    background:var(--petrol); padding:14px 16px; display:flex;
+    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .topbar .brand{ display:flex; align-items:center; gap:8px; text-decoration:none; }
+  .topbar .brand img{ width:28px; height:28px; object-fit:contain; }
+  .topbar .brand span{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
+    color:#fff; letter-spacing:.02em;
+  }
+  .topbar nav{ display:flex; gap:16px; flex-wrap:wrap; }
+  .topbar nav a{
+    color:#CFE3E0; text-decoration:none; font-size:12.5px; font-weight:500;
+    padding:3px 0; border-bottom:2px solid transparent;
+  }
+  .topbar nav a:hover{ color:#fff; }
+  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
+  .page-head{ max-width:520px; margin:0 auto; padding:22px 16px 4px; }
+  .page-head h1{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
+    color:var(--petrol); margin:0;
+  }
+  .page-head .sub{ color:var(--muted); font-size:13px; margin-top:6px; }
+
+  main{ max-width:520px; margin:0 auto; padding:16px 16px 60px; }
+
+  .field{ position:relative; margin-bottom:6px; }
+  input[type="text"]{
+    width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:10px;
+    font-size:15px; font-family:'Inter',sans-serif; background:#fff; color:var(--ink);
+  }
+  input[type="text"]:focus{ outline:none; border-color:var(--petrol-light); }
+  .ac-list{
+    position:absolute; left:0; right:0; top:100%;
+    background:#fff; border:1px solid var(--line); border-top:none;
+    border-radius:0 0 9px 9px;
+    max-height:220px; overflow-y:auto;
+    z-index:20; display:none;
+    box-shadow:0 8px 18px rgba(15,61,62,.1);
+  }
+  .ac-list.show{ display:block; }
+  .ac-item{
+    padding:10px 12px; font-size:14px; cursor:pointer;
+    border-bottom:1px solid #F0EBE0;
+  }
+  .ac-item:last-child{ border-bottom:none; }
+  .ac-item:hover, .ac-item.hi{ background:#F5EFE6; }
+  .ac-item mark{ background:#FFE3D2; color:var(--ink); border-radius:2px; }
+
+  .load-status{
+    font-size:12px; color:#B36A2E; background:#FFF3E6; border:1px solid #F3D9B8;
+    border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none;
+  }
+  .load-status.show{ display:block; }
+
+  .empty-hint{ font-size:13px; color:#8A948F; padding:14px 2px; text-align:center; }
+
+  .bike-panel{ margin-top:18px; }
+  .bike-panel-head{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:12px;
+  }
+  .bike-panel-head h2{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:20px;
+    color:var(--petrol); margin:0;
+  }
+  .change-bike{
+    background:none; border:none; color:var(--petrol); text-decoration:underline;
+    font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500;
+    cursor:pointer; padding:0;
+  }
+
+  .upload-card{
+    background:var(--card); border:1px dashed var(--line); border-radius:12px;
+    padding:16px; text-align:center; margin-bottom:16px;
+  }
+  .upload-btn{
+    display:inline-block; padding:12px 20px; border-radius:10px;
+    background:var(--cone); color:#fff;
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:14px;
+    letter-spacing:.04em; text-transform:uppercase; cursor:pointer; border:none;
+  }
+  .upload-btn:active{ transform:scale(.98); }
+  .upload-btn input{ display:none; }
+  .upload-hint{ font-size:12px; color:var(--muted); margin-top:8px; }
+
+  .upload-status{
+    font-size:13px; margin-top:10px; padding:8px 10px; border-radius:8px; display:none;
+  }
+  .upload-status.show{ display:block; }
+  .upload-status.ok{ background:#E8F5EE; color:var(--ok); border:1px solid #BEE3CE; }
+  .upload-status.err{ background:#FCEBEB; color:var(--err); border:1px solid #F3C6C6; }
+  .upload-status.pending{ background:#FFF3E6; color:#B36A2E; border:1px solid #F3D9B8; }
+
+  .progress-wrap{
+    margin-top:10px; display:none;
+  }
+  .progress-wrap.show{ display:block; }
+  .progress-label{
+    display:flex; justify-content:space-between; font-size:12px; color:var(--muted);
+    margin-bottom:5px;
+  }
+  .progress-track{
+    height:8px; border-radius:5px; background:#EFE8DA; overflow:hidden;
+    border:1px solid var(--line);
+  }
+  .progress-fill{
+    height:100%; background:var(--cone); border-radius:5px;
+    width:0%; transition:width .2s ease;
+  }
+
+  .gallery{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px;
+  }
+  .photo-card{
+    position:relative; background:var(--card); border:1px solid var(--line);
+    border-radius:10px; overflow:hidden; aspect-ratio:1/1; cursor:pointer;
+  }
+  .photo-card img{
+    width:100%; height:100%; object-fit:cover; display:block;
+    background:#EFE8DA;
+  }
+  .photo-card .del-btn{
+    position:absolute; top:6px; right:6px; width:28px; height:28px;
+    border-radius:50%; border:none; background:rgba(26,36,33,.65); color:#fff;
+    font-size:14px; line-height:28px; text-align:center; cursor:pointer; padding:0;
+    z-index:2;
+  }
+  .photo-card .del-btn:active{ background:rgba(197,48,48,.9); }
+  .photo-card.uploading{ cursor:default; }
+  .photo-card.uploading::after{
+    content:"Uploading…";
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(245,239,230,.85); color:var(--muted); font-size:12px;
+  }
+
+  .gallery-empty{
+    grid-column:1 / -1; font-size:13px; color:#8A948F; padding:24px 2px; text-align:center;
+  }
+
+  .lightbox{
+    position:fixed; inset:0; z-index:999; background:rgba(15,20,19,.94);
+    display:none; align-items:center; justify-content:center;
+  }
+  .lightbox.show{ display:flex; }
+  .lightbox img{
+    max-width:100%; max-height:100%; object-fit:contain; display:block;
+  }
+  .lightbox-close{
+    position:absolute; top:16px; right:16px; width:40px; height:40px;
+    border-radius:50%; border:none; background:rgba(255,255,255,.15); color:#fff;
+    font-size:20px; line-height:40px; text-align:center; cursor:pointer; padding:0;
+  }
+  .lightbox-close:active{ background:rgba(255,255,255,.3); }
+
+  .hidden{ display:none; }
+
+  .coverage-panel{ margin-top:14px; }
+  .coverage-summary{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px;
+  }
+  .coverage-summary .stat{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:10px 12px;
+  }
+  .coverage-summary .stat .n{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:22px;
+  }
+  .coverage-summary .stat .l{ font-size:11px; color:var(--muted); margin-top:2px; }
+  .coverage-summary .stat.bad .n{ color:var(--err); }
+  .coverage-summary .stat.ok .n{ color:var(--ok); }
+
+  .coverage-section{ margin-bottom:16px; }
+  .coverage-section h3{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
+    color:var(--petrol); margin:0 0 8px;
+  }
+  .coverage-row{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    background:var(--card); border:1px solid var(--line); border-left:4px solid var(--line);
+    border-radius:8px; padding:9px 12px; margin-bottom:6px; font-size:13.5px; cursor:pointer;
+  }
+  .coverage-row.missing{ border-left-color:var(--err); }
+  .coverage-row.covered{ border-left-color:var(--ok); }
+  .coverage-row .count{ font-size:12px; color:var(--muted); white-space:nowrap; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="index.html">
+    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
+    <span>AA Scooter Rental</span>
+  </a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="customers.html">Customer Record</a>
+    <a href="pricing.html">Price Calculator</a>
+    <a href="parts.html">Parts &amp; Oil</a>
+    <a href="oilchange.html">Oil Change</a>
+    <a href="bikes.html">Bikes Status</a>
+    <a href="bikephotos.html" class="active">Bike Photos</a>
+    <a href="available-bikes.html">Available Bikes</a>
+    <a href="accounts.html">Accounts</a>
+  </nav>
+</div>
+
+<div class="page-head">
+  <h1>Bike Photos</h1>
+  <div class="sub">Search a bike to view, upload, or delete its photos</div>
+</div>
+
+<main>
+  <div id="searchSection">
+    <div class="field">
+      <input type="text" id="bikeSearch" placeholder="Search bikes… e.g. GT, Aerox" autocomplete="off">
+      <div class="ac-list" id="bikeAcList"></div>
+    </div>
+    <div class="load-status" id="loadStatus">Loading bikes…</div>
+    <div class="load-status" id="coverageLoadStatus"></div>
+    <div class="coverage-panel hidden" id="coveragePanel"></div>
+  </div>
+
+  <div class="bike-panel hidden" id="bikePanel">
+    <div class="bike-panel-head">
+      <h2 id="selectedBikeName"></h2>
+      <button type="button" class="change-bike" id="changeBikeBtn">Change bike</button>
+    </div>
+
+    <div class="upload-card">
+      <label class="upload-btn">
+        📷 Add photos
+        <input type="file" id="photoInput" accept="image/*" multiple>
+      </label>
+      <div class="upload-hint">JPG or PNG, multiple at once is fine.</div>
+      <div class="upload-status" id="uploadStatus"></div>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-label">
+          <span id="progressLabel">Uploading…</span>
+          <span id="progressCount"></span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="load-status" id="galleryLoadStatus">Loading photos…</div>
+    <div class="gallery" id="gallery"></div>
+  </div>
+</main>
+
+<div class="lightbox" id="lightbox">
+  <button type="button" class="lightbox-close" id="lightboxClose">✕</button>
+  <img id="lightboxImg" src="" alt="Bike photo, full size">
+</div>
+
+<script>
+const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
+
+let bikeNames = [];
+let selectedBike = null;
+
+const searchInput = document.getElementById('bikeSearch');
+const acList = document.getElementById('bikeAcList');
+const searchSection = document.getElementById('searchSection');
+const bikePanel = document.getElementById('bikePanel');
+const selectedBikeName = document.getElementById('selectedBikeName');
+const gallery = document.getElementById('gallery');
+const photoInput = document.getElementById('photoInput');
+const uploadStatus = document.getElementById('uploadStatus');
+const progressWrap = document.getElementById('progressWrap');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const progressCount = document.getElementById('progressCount');
+const lightbox = document.getElementById('lightbox');
+const lightboxImg = document.getElementById('lightboxImg');
+const lightboxClose = document.getElementById('lightboxClose');
+const coveragePanel = document.getElementById('coveragePanel');
+
+function openLightbox(url) {
+  lightboxImg.src = url;
+  lightbox.classList.add('show');
+}
+function closeLightbox() {
+  lightbox.classList.remove('show');
+  lightboxImg.src = '';
+}
+lightboxClose.addEventListener('click', closeLightbox);
+// Close only on a genuine click on the backdrop itself -- not when the
+// mousedown started elsewhere (e.g. dragging to select something) and the
+// mouseup happens to land on the backdrop. See accounts.html's modal for
+// the same fix and the reasoning behind it.
+let lightboxMouseDownOnBackdrop = false;
+lightbox.addEventListener('mousedown', (e) => {
+  lightboxMouseDownOnBackdrop = (e.target === lightbox);
+});
+lightbox.addEventListener('click', (e) => {
+  if (e.target === lightbox && lightboxMouseDownOnBackdrop) closeLightbox();
+  lightboxMouseDownOnBackdrop = false;
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeLightbox();
+});
+
+function setLoadStatus(id, msg) {
+  const el = document.getElementById(id);
+  if (!msg) { el.classList.remove('show'); return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function tokenMatch(value, query) {
+  if (!query) return true;
+  const v = (value || '').toString().toLowerCase();
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return tokens.every(t => v.includes(t));
+}
+
+function highlight(value, query) {
+  let out = String(value || '');
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  tokens.forEach(t => {
+    if (!t) return;
+    const re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
+    out = out.replace(re, '<mark>$1</mark>');
+  });
+  return out;
+}
+
+function loadBikeNames() {
+  setLoadStatus('loadStatus', 'Loading bikes…');
+  return fetch(scriptUrl + '?action=parts')
+    .then(res => res.json())
+    .then(data => {
+      if (!data.success) throw new Error(data.error || 'Could not load bikes');
+      const bikeHeader = data.headers[0];
+      bikeNames = data.rows
+        // Struck-through rows are bikes already marked sold — they no
+        // longer need photos, so they're excluded from both search and
+        // the photo coverage check entirely.
+        .filter(r => !r.__struck)
+        .map(r => (r[bikeHeader] || '').toString().trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      setLoadStatus('loadStatus', null);
+    })
+    .catch(err => {
+      setLoadStatus('loadStatus', 'Could not load bikes: ' + err.message);
+    });
+}
+
+function closeAc() {
+  acList.classList.remove('show');
+  acList.innerHTML = '';
+}
+
+function openAc(query) {
+  const options = bikeNames.filter(n => tokenMatch(n, query)).slice(0, 8);
+  if (!query || options.length === 0) { closeAc(); return; }
+  acList.innerHTML = options.map((v, i) =>
+    `<div class="ac-item" data-index="${i}">${highlight(v, query)}</div>`
+  ).join('');
+  acList.classList.add('show');
+  Array.from(acList.children).forEach((el, i) => {
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      selectBike(options[i]);
+    });
+  });
+}
+
+searchInput.addEventListener('input', () => openAc(searchInput.value.trim()));
+searchInput.addEventListener('focus', () => openAc(searchInput.value.trim()));
+document.addEventListener('click', (e) => {
+  if (!searchInput.contains(e.target) && !acList.contains(e.target)) closeAc();
+});
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeAc();
+});
+
+function selectBike(name) {
+  selectedBike = name;
+  closeAc();
+  searchInput.value = '';
+  searchSection.classList.add('hidden');
+  bikePanel.classList.remove('hidden');
+  selectedBikeName.textContent = name;
+  uploadStatus.className = 'upload-status';
+  loadGallery();
+}
+
+document.getElementById('changeBikeBtn').addEventListener('click', () => {
+  selectedBike = null;
+  bikePanel.classList.add('hidden');
+  searchSection.classList.remove('hidden');
+  searchInput.focus();
+});
+
+function photoCardHtml(photo) {
+  return `
+    <div class="photo-card" data-id="${photo.id}">
+      <img src="${photo.url}" alt="${selectedBike || 'Bike'} photo" loading="lazy">
+      <button type="button" class="del-btn" data-id="${photo.id}" title="Delete photo">✕</button>
+    </div>
+  `;
+}
+
+function loadGallery() {
+  if (!selectedBike) return;
+  setLoadStatus('galleryLoadStatus', 'Loading photos…');
+  gallery.innerHTML = '';
+  fetch(scriptUrl + '?action=bikePhotos&bike=' + encodeURIComponent(selectedBike))
+    .then(res => res.json())
+    .then(data => {
+      if (!data.success) throw new Error(data.error || 'Could not load photos');
+      setLoadStatus('galleryLoadStatus', null);
+      renderGallery(data.photos || []);
+    })
+    .catch(err => {
+      setLoadStatus('galleryLoadStatus', 'Could not load photos: ' + err.message);
+    });
+}
+
+function renderGallery(photos) {
+  if (!photos.length) {
+    gallery.innerHTML = '<div class="gallery-empty">No photos yet for this bike.</div>';
+    return;
+  }
+  gallery.innerHTML = photos.map(photoCardHtml).join('');
+  attachDeleteHandlers();
+}
+
+function attachDeleteHandlers() {
+  gallery.querySelectorAll('.photo-card').forEach(card => {
+    if (card.classList.contains('uploading')) return;
+    const img = card.querySelector('img');
+    if (img && !card._lightboxAttached) {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.del-btn')) return;
+        openLightbox(img.src);
+      });
+      card._lightboxAttached = true;
+    }
+  });
+
+  gallery.querySelectorAll('.del-btn').forEach(btn => {
+    if (btn._deleteAttached) return;
+    btn._deleteAttached = true;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-id');
+      if (!confirm('Delete this photo? This cannot be undone from here.')) return;
+      const card = btn.closest('.photo-card');
+      card.style.opacity = '0.4';
+      btn.disabled = true;
+      fetch(scriptUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'deletePhoto', fileId: id })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (!data.success) throw new Error(data.error || 'Could not delete');
+          card.remove();
+          if (!gallery.querySelector('.photo-card')) {
+            gallery.innerHTML = '<div class="gallery-empty">No photos yet for this bike.</div>';
+          }
+        })
+        .catch(err => {
+          alert('Could not delete: ' + err.message);
+          card.style.opacity = '1';
+          btn.disabled = false;
+        });
+    });
+  });
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function uploadOne(file) {
+  return fileToBase64(file).then(base64 => {
+    return fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'uploadPhoto',
+        bike: selectedBike,
+        filename: file.name,
+        mimeType: file.type || 'image/jpeg',
+        base64: base64
+      })
+    }).then(res => res.json());
+  });
+}
+
+photoInput.addEventListener('change', async () => {
+  const files = Array.from(photoInput.files || []);
+  if (!files.length) return;
+
+  // Clear the "no photos yet" placeholder if present, before adding uploading cards.
+  if (gallery.querySelector('.gallery-empty')) gallery.innerHTML = '';
+
+  uploadStatus.className = 'upload-status pending show';
+  uploadStatus.textContent = 'Uploading ' + files.length + (files.length === 1 ? ' photo…' : ' photos…');
+
+  progressWrap.classList.add('show');
+  progressLabel.textContent = 'Uploading…';
+  progressFill.style.width = '0%';
+  progressCount.textContent = '0 / ' + files.length;
+
+  let successCount = 0;
+  let firstError = null;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const placeholder = document.createElement('div');
+    placeholder.className = 'photo-card uploading';
+    gallery.prepend(placeholder);
+
+    try {
+      const data = await uploadOne(file);
+      if (!data.success) throw new Error(data.error || 'Upload failed');
+      placeholder.outerHTML = photoCardHtml(data.photo);
+      successCount++;
+    } catch (err) {
+      placeholder.remove();
+      firstError = err.message;
+    }
+
+    const done = i + 1;
+    progressCount.textContent = done + ' / ' + files.length;
+    progressFill.style.width = Math.round((done / files.length) * 100) + '%';
+  }
+
+  attachDeleteHandlers();
+  photoInput.value = '';
+  progressWrap.classList.remove('show');
+
+  if (firstError && successCount === 0) {
+    uploadStatus.className = 'upload-status err show';
+    uploadStatus.textContent = 'Could not upload: ' + firstError;
+  } else if (firstError) {
+    uploadStatus.className = 'upload-status err show';
+    uploadStatus.textContent = successCount + ' uploaded, but some failed: ' + firstError;
+  } else {
+    uploadStatus.className = 'upload-status ok show';
+    uploadStatus.textContent = successCount + (successCount === 1 ? ' photo' : ' photos') + ' uploaded.';
+  }
+
+  if (!gallery.querySelector('.photo-card')) {
+    gallery.innerHTML = '<div class="gallery-empty">No photos yet for this bike.</div>';
+  }
+});
+
+// Same fuzzy-match rules as bikes.html / bike-name-audit.html / Code.gs, so
+// a photo folder named slightly differently from the current bike name
+// (e.g. an old model name) still counts as a match rather than showing as
+// both "missing" and an orphan folder.
+function normalizeBikeName(s) {
+  return (s || '').toString()
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+const DISTINGUISHING_SUFFIXES = new Set([
+  'one','two','three','four','five','six','seven','eight','nine','ten',
+  'i','ii','iii','iv','v','vi','vii','viii','ix','x',
+  '1','2','3','4','5','6','7','8','9','10'
+]);
+function bikeNamesMatch(a, b) {
+  const na = normalizeBikeName(a);
+  const nb = normalizeBikeName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const ta = na.split(' ');
+  const tb = nb.split(' ');
+  const shorter = ta.length <= tb.length ? ta : tb;
+  const longer = ta.length <= tb.length ? tb : ta;
+  const isPrefix = shorter.every((tok, i) => tok === longer[i]);
+  if (isPrefix) {
+    const extra = longer.slice(shorter.length);
+    if (extra.some(t => DISTINGUISHING_SUFFIXES.has(t))) return false;
+    return true;
+  }
+  return na.includes(nb) || nb.includes(na);
+}
+
+function coverageRowHtml(cls, name, countLabel) {
+  return `<div class="coverage-row ${cls}" data-name="${name.replace(/"/g, '&quot;')}">
+    <span>${name}</span><span class="count">${countLabel}</span>
+  </div>`;
+}
+
+function setCoverageStatus(msg) {
+  const el = document.getElementById('coverageLoadStatus');
+  if (!msg) { el.classList.remove('show'); el.textContent = ''; return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function runCoverageCheck() {
+  setCoverageStatus('Checking bikes and photo folders…');
+  coveragePanel.classList.add('hidden');
+
+  Promise.all([
+    bikeNames.length ? Promise.resolve(bikeNames) : loadBikeNames().then(() => bikeNames),
+    fetch(scriptUrl + '?action=photoFolders').then(r => r.json())
+  ]).then(([names, folderRes]) => {
+    if (!folderRes.success) throw new Error(folderRes.error || 'Could not load photo folders');
+    setCoverageStatus(null);
+
+    const folders = folderRes.folders || [];
+
+    const missing = [];
+    const covered = [];
+    names.forEach(name => {
+      const match = folders.find(f => bikeNamesMatch(f.name, name));
+      if (!match || match.count === 0) {
+        missing.push(name);
+      } else {
+        covered.push({ name, count: match.count });
+      }
+    });
+
+    // Folders that exist in Drive but don't match any current bike name —
+    // worth a look, could be an old/renamed bike or a typo'd folder.
+    const orphanFolders = folders.filter(f => !names.some(n => bikeNamesMatch(f.name, n)));
+
+    const html = [];
+    html.push(`<div class="coverage-summary">
+      <div class="stat bad"><div class="n">${missing.length}</div><div class="l">Bikes needing photos</div></div>
+      <div class="stat ok"><div class="n">${covered.length}</div><div class="l">Bikes with photos</div></div>
+    </div>`);
+
+    html.push(`<div class="coverage-section"><h3>Needs photos</h3>`);
+    if (missing.length) {
+      missing
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+        .forEach(name => html.push(coverageRowHtml('missing', name, 'Add photos →')));
+    } else {
+      html.push(`<div class="empty-hint">None — every bike has at least one photo.</div>`);
+    }
+    html.push(`</div>`);
+
+    html.push(`<div class="coverage-section"><h3>Already has photos</h3>`);
+    if (covered.length) {
+      covered
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+        .forEach(c => html.push(coverageRowHtml('covered', c.name, c.count + (c.count === 1 ? ' photo' : ' photos'))));
+    } else {
+      html.push(`<div class="empty-hint">None yet.</div>`);
+    }
+    html.push(`</div>`);
+
+    if (orphanFolders.length) {
+      html.push(`<div class="coverage-section"><h3>Photo folders not matching a current bike</h3>`);
+      orphanFolders.forEach(f => html.push(coverageRowHtml('covered', f.name, f.count + (f.count === 1 ? ' photo' : ' photos'))));
+      html.push(`</div>`);
+    }
+
+    coveragePanel.innerHTML = html.join('');
+    coveragePanel.classList.remove('hidden');
+
+    // Tapping any row jumps straight to that bike's upload/gallery view.
+    coveragePanel.querySelectorAll('.coverage-row').forEach(row => {
+      row.addEventListener('click', () => selectBike(row.getAttribute('data-name')));
+    });
+  }).catch(err => {
+    setCoverageStatus('Could not check coverage: ' + err.message);
+  });
+}
+
+loadBikeNames().then(runCoverageCheck);
+</script>
+
+</body>
+</html>

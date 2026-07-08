@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bikes Status — AA Scooters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sand:#F5EFE6;
+    --ink:#1A2421;
+    --petrol:#0F3D3E;
+    --petrol-light:#175A5B;
+    --cone:#FF6B35;
+    --card:#FFFFFF;
+    --line:#DED4C2;
+    --muted:#5A6663;
+    --ok:#2F855A;
+    --rented:#B7791F;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--sand); color:var(--ink);
+    font-family:'Inter',sans-serif; min-height:100vh;
+  }
+  .topbar{
+    background:var(--petrol); padding:14px 16px; display:flex;
+    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .topbar .brand{ display:flex; align-items:center; gap:8px; text-decoration:none; }
+  .topbar .brand img{ width:28px; height:28px; object-fit:contain; }
+  .topbar .brand span{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
+    color:#fff; letter-spacing:.02em;
+  }
+  .topbar nav{ display:flex; gap:16px; flex-wrap:wrap; }
+  .topbar nav a{
+    color:#CFE3E0; text-decoration:none; font-size:12.5px; font-weight:500;
+    padding:3px 0; border-bottom:2px solid transparent;
+  }
+  .topbar nav a:hover{ color:#fff; }
+  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
+  .page-head{ max-width:520px; margin:0 auto; padding:22px 16px 4px; }
+  .page-head h1{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
+    color:var(--petrol); margin:0;
+  }
+  .page-head .sub{ color:var(--muted); font-size:13px; margin-top:6px; }
+
+  main{ max-width:520px; margin:0 auto; padding:16px 16px 60px; }
+
+  .search-wrap{ position:relative; margin-bottom:6px; }
+  .search-wrap input{
+    width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:10px;
+    font-size:15px; font-family:'Inter',sans-serif; background:#fff; color:var(--ink);
+  }
+  .search-wrap input:focus{ outline:none; border-color:var(--petrol-light); }
+  .ac-list{
+    position:absolute; left:0; right:0; top:100%;
+    background:#fff; border:1px solid var(--line); border-top:none;
+    border-radius:0 0 9px 9px;
+    max-height:220px; overflow-y:auto;
+    z-index:20; display:none;
+    box-shadow:0 8px 18px rgba(15,61,62,.1);
+  }
+  .ac-list.show{ display:block; }
+  .ac-item{
+    padding:10px 12px; font-size:14px; cursor:pointer;
+    border-bottom:1px solid #F0EBE0;
+  }
+  .ac-item:last-child{ border-bottom:none; }
+  .ac-item:hover, .ac-item.hi{ background:#F5EFE6; }
+  .ac-item mark{ background:#FFE3D2; color:var(--ink); border-radius:2px; }
+
+  .load-status{
+    font-size:12px; color:#B36A2E; background:#FFF3E6; border:1px solid #F3D9B8;
+    border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none;
+  }
+  .load-status.show{ display:block; }
+
+  .results-count{
+    font-size:12px; color:#7A8A86; margin:14px 2px 10px;
+    font-family:'Barlow Condensed',sans-serif; letter-spacing:.06em; text-transform:uppercase;
+  }
+
+  .bike-card{
+    background:var(--card); border:1px solid var(--line); border-left:5px solid var(--line);
+    border-radius:10px; padding:12px 14px; margin-bottom:10px;
+  }
+  .bike-card.rented{ border-left-color:var(--rented); }
+  .bike-card.not-rented{ border-left-color:var(--ok); }
+
+  .bc-top{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+  .bc-name{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:17px; color:var(--petrol);
+  }
+  .bc-tag{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:12.5px;
+    letter-spacing:.04em; text-transform:uppercase; white-space:nowrap;
+  }
+  .bc-tag.rented{ color:var(--rented); }
+  .bc-tag.not-rented{ color:var(--ok); }
+  .bc-renter{
+    font-size:12.5px; color:var(--petrol); margin-top:6px;
+    background:#EEF5F2; border:1px solid #D8E8E1; border-radius:7px;
+    padding:5px 9px; display:inline-block;
+  }
+  .bc-renter b{ font-weight:700; }
+  .bc-details{ font-size:12.5px; color:var(--muted); margin-top:6px; line-height:1.5; }
+  .bc-details b{ color:var(--ink); font-weight:600; }
+
+  .due-badge{
+    display:inline-block; font-family:'Barlow Condensed',sans-serif; font-weight:700;
+    font-size:11px; letter-spacing:.04em; text-transform:uppercase;
+    padding:2px 7px; border-radius:5px; margin-left:4px; vertical-align:middle;
+  }
+  .due-badge.contact{ background:#FFF3E6; color:#B36A2E; }
+  .due-badge.due-today{ background:#FDECEC; color:#C0392B; }
+  .due-badge.overdue{ background:#C0392B; color:#fff; }
+
+  .bc-actions{ display:flex; gap:8px; margin-top:10px; }
+  .bc-btn{
+    flex:1; padding:9px 10px; border-radius:8px; border:1px solid var(--line);
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:13px;
+    letter-spacing:.03em; text-transform:uppercase; cursor:pointer;
+    background:#fff; color:var(--petrol);
+  }
+  .bc-btn:active{ transform:scale(.98); }
+  .bc-btn:disabled{ opacity:.55; cursor:default; }
+  .bc-btn.return-btn{ background:var(--petrol); color:#fff; border-color:var(--petrol); }
+  .bc-btn.extend-btn{ background:#fff; color:var(--muted); }
+  .bc-btn.confirm-return{ background:var(--cone); color:#fff; border-color:var(--cone); }
+  .bc-btn.cancel-return{ background:#fff; color:var(--muted); }
+
+  .bc-actions-picker{ flex-wrap:wrap; }
+  .picker-input{
+    flex:1 1 100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px;
+    font-size:14px; font-family:'Inter',sans-serif; background:#fff; color:var(--ink);
+  }
+  .extend-month-row{
+    flex:1 1 100%; display:flex; align-items:center; gap:7px;
+    font-size:13px; color:var(--ink); font-weight:500;
+  }
+  .extend-month-row input[type="checkbox"]{
+    width:17px; height:17px; accent-color:var(--cone); cursor:pointer;
+  }
+  .extend-month-row label{ cursor:pointer; }
+  .extend-note{
+    flex:1 1 100%; font-size:11.5px; color:var(--muted); line-height:1.4; margin-top:-2px;
+  }
+
+  .empty-hint{ font-size:13px; color:#8A948F; padding:14px 2px; text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="index.html">
+    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
+    <span>AA Scooter Rental</span>
+  </a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="customers.html">Customer Record</a>
+    <a href="pricing.html">Price Calculator</a>
+    <a href="parts.html">Parts &amp; Oil</a>
+    <a href="oilchange.html">Oil Change</a>
+    <a href="bikes.html" class="active">Bikes Status</a>
+    <a href="bikephotos.html">Bike Photos</a>
+    <a href="available-bikes.html">Available Bikes</a>
+    <a href="accounts.html">Accounts</a>
+  </nav>
+</div>
+
+<div class="page-head">
+  <h1>Bikes Status</h1>
+  <div class="sub">All bikes, who they're rented to, and when they're due back</div>
+</div>
+
+<main>
+  <div class="search-wrap field">
+    <input type="text" id="bikeSearch" placeholder="Search bikes… e.g. GT, Aerox" autocomplete="off">
+    <div class="ac-list" id="bikeAcList"></div>
+  </div>
+
+  <div class="load-status" id="loadStatus">Loading bikes…</div>
+  <div class="results-count" id="resultsCount"></div>
+  <div id="listBox"></div>
+</main>
+
+<script>
+const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
+
+let bikeNames = [];    // list of bike name strings, alphabetically sorted
+let customerRows = null;
+let categoryRows = []; // bike -> category text, from the Bike Tax tab (for auto-pricing extensions)
+
+function setLoadStatus(msg) {
+  const el = document.getElementById('loadStatus');
+  if (!msg) { el.classList.remove('show'); return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function loadData() {
+  setLoadStatus('Loading bikes…');
+  return Promise.all([
+    fetch(scriptUrl + '?action=parts').then(res => res.json()),
+    fetch(scriptUrl).then(res => res.json()).catch(err => ({ success: false, error: err.message }))
+  ])
+    .then(([partsResult, customerResult]) => {
+      if (!partsResult.success) throw new Error(partsResult.error || 'Could not load bikes');
+      const bikeHeader = partsResult.headers[0];
+      bikeNames = partsResult.rows
+        .filter(r => !r.__struck) // struck-through in Parts & Oil = sold, don't show it
+        .map(r => (r[bikeHeader] || '').toString().trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      categoryRows = partsResult.categoryRows || [];
+
+      if (customerResult && customerResult.success) {
+        customerRows = customerResult.rows;
+        setLoadStatus(null);
+      } else {
+        customerRows = [];
+        setLoadStatus('Rental info unavailable (' + (customerResult && customerResult.error ? customerResult.error : 'unknown error') + ') — bikes will show as "Not rented".');
+      }
+      render();
+    })
+    .catch(err => {
+      setLoadStatus('Could not load bikes: ' + err.message);
+    });
+}
+
+// Parse dates in the dd/MM/yyyy format the sheet returns.
+function parseFlexibleDate(str) {
+  if (!str) return null;
+  str = String(str).trim();
+  var slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashMatch) {
+    var d = parseInt(slashMatch[1], 10), m = parseInt(slashMatch[2], 10) - 1, y = parseInt(slashMatch[3], 10);
+    var dt = new Date(y, m, d);
+    if (!isNaN(dt.getTime())) return dt;
+  }
+  var dt2 = new Date(str);
+  if (!isNaN(dt2.getTime())) return dt2;
+  return null;
+}
+
+function formatDateDisplay(str) {
+  var date = parseFlexibleDate(str);
+  if (!date) return str || '—';
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// yyyy-MM-dd (what <input type="date"> gives us) -> dd/MM/yyyy (how the
+// sheet -- and customerRows.returnDate -- stores it). Used to update a
+// customer row's returnDate locally right after a successful "Return",
+// without waiting on a full reload.
+function isoToDmy(iso) {
+  const m = String(iso || '').trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!m) return '';
+  const y = m[1], mo = m[2].padStart(2, '0'), d = m[3].padStart(2, '0');
+  return `${d}/${mo}/${y}`;
+}
+
+function normalizeBikeName(s) {
+  return (s || '').toString()
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+// Words/numerals used to tell apart otherwise-identical bike names that are
+// actually different bikes — e.g. "Gran Filano" and "Gran Filano Two" are
+// two separate bikes, not a loose match of the same one.
+const DISTINGUISHING_SUFFIXES = new Set([
+  'one','two','three','four','five','six','seven','eight','nine','ten',
+  'i','ii','iii','iv','v','vi','vii','viii','ix','x',
+  '1','2','3','4','5','6','7','8','9','10'
+]);
+
+function bikeNamesMatch(a, b) {
+  const na = normalizeBikeName(a);
+  const nb = normalizeBikeName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+
+  const ta = na.split(' ');
+  const tb = nb.split(' ');
+  const shorter = ta.length <= tb.length ? ta : tb;
+  const longer = ta.length <= tb.length ? tb : ta;
+
+  // Fuzzy match allowed when the shorter name is a clean word-for-word
+  // prefix of the longer one — UNLESS the extra trailing word(s) are a
+  // distinguishing number/ordinal, in which case it's a different bike.
+  const isPrefix = shorter.every((tok, i) => tok === longer[i]);
+  if (isPrefix) {
+    const extra = longer.slice(shorter.length);
+    if (extra.some(t => DISTINGUISHING_SUFFIXES.has(t))) return false;
+    return true;
+  }
+
+  return na.includes(nb) || nb.includes(na);
+}
+
+// ---- Auto-pricing for long extensions (1-month checkbox, or 30+ days) ----
+// Mirrors the Price Calculator / Available Bikes rate table exactly, so the
+// "Amount paid" field on the extend form can auto-fill with the correct
+// quote instead of staff having to go work it out on another page.
+const CATEGORY_DEFS = [
+  { key: "125cc",                      label: "125CC" },
+  { key: "150-155cc standard key",     label: "155CC Standard Key" },
+  { key: "150-155cc keyless",          label: "155CC Keyless" },
+  { key: "nmax 155cc keyless",         label: "Nmax 155CC" },
+  { key: "forza 300cc",                label: "Forza 300CC" },
+  { key: "xmax 300 keyless",           label: "XMAX 300" },
+];
+
+const RATES = {
+  1:[300,400,450,500,600,800],2:[600,800,900,1000,1200,1600],
+  3:[900,1200,1300,1400,1800,2400],4:[1000,1300,1500,1600,2300,3100],
+  5:[1100,1500,1800,1900,2800,3800],6:[1200,1700,1900,2000,3300,4500],
+  7:[1300,1800,2000,2100,3800,5100],8:[1400,1900,2100,2200,4200,5700],
+  9:[1500,2000,2200,2300,4600,6300],10:[1600,2200,2300,2400,5000,6800],
+  11:[1700,2300,2400,2500,5400,7300],12:[1800,2400,2500,2600,5800,7800],
+  13:[1900,2500,2600,2700,6200,8300],14:[2000,2600,2700,2800,6500,8700],
+  15:[2100,2700,2800,2900,6900,9100],16:[2200,2800,2900,3000,7100,9500],
+  17:[2300,2900,3000,3100,7500,9800],18:[2400,3000,3100,3200,7900,10100],
+  19:[2500,3100,3300,3400,8300,10300],20:[2500,3200,3500,3600,8700,10500],
+  21:[2600,3300,3600,3700,9000,10700],22:[2600,3400,3700,3800,8100,10800],
+  23:[2700,3500,3800,3900,8400,11000],24:[2700,3600,3900,4200,8700,11200],
+  25:[2800,3700,4000,4500,9000,11400],26:[2800,3800,4100,4600,9200,11600],
+  27:[2900,3900,4200,4700,9400,11800],28:[2900,3900,4300,4800,9600,11900],
+  29:[3000,4000,4400,4900,9800,12000],30:[3000,4000,4500,5000,10000,12000],
+};
+
+function normalizeCategory(s) {
+  return (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+// Tries an exact match against the canonical key first (fast path), then
+// falls back to keyword matching. The Category column is free-typed by
+// staff, so its exact wording/punctuation varies bike-to-bike — e.g.
+// "Forza 300" instead of "Forza 300CC", no hyphen in "150-155", extra
+// spacing — and an exact-string match alone was silently failing on these,
+// which is why the auto-priced amount was coming back as 0 instead of a
+// real quote.
+function findCategoryIndex(catText) {
+  const norm = normalizeCategory(catText);
+  if (!norm) return -1;
+
+  const exact = CATEGORY_DEFS.findIndex(c => c.key === norm);
+  if (exact !== -1) return exact;
+
+  const has = (s) => norm.indexOf(s) !== -1;
+  if (has('forza')) return 4;
+  if (has('xmax')) return 5;
+  if (has('nmax')) return 3;
+  if (has('125')) return 0;
+  if (has('150') || has('155')) {
+    return has('keyless') ? 2 : 1; // 155CC Keyless vs 155CC Standard Key
+  }
+  return -1;
+}
+
+function priceForCategory(catIndex, months, leftoverDays) {
+  if (catIndex < 0) return null;
+  const monthlyRate = RATES[30][catIndex];
+  if (months === 0) {
+    return RATES[leftoverDays] ? RATES[leftoverDays][catIndex] : null;
+  }
+  const dailyRate = monthlyRate / 30;
+  return Math.round(monthlyRate * months + leftoverDays * dailyRate);
+}
+
+// Quotes the extension period itself (1 calendar month if the checkbox is
+// ticked, otherwise the plain day count) at that bike's category rate.
+// Returns null if the bike's category isn't set or isn't a known rate
+// category (a custom-rate bike), in which case staff enter the amount by
+// hand as before.
+function computeExtendPrice(bikeName, extendMonth, days) {
+  const match = categoryRows.find(cr => bikeNamesMatch(cr.bike, bikeName));
+  const catIndex = findCategoryIndex(match ? match.category : '');
+  if (catIndex < 0) return null;
+
+  let months, leftoverDays;
+  if (extendMonth) {
+    months = 1;
+    leftoverDays = 0;
+  } else {
+    const totalDays = days > 0 ? days : 0;
+    months = Math.floor(totalDays / 30);
+    leftoverDays = totalDays % 30;
+  }
+  return priceForCategory(catIndex, months, leftoverDays);
+}
+
+// Whether a customer row counts as "still rented", per the "situation"
+// column: "Returned" means the bike is back; blank or "Rented" (or anything
+// else) means it's still out.
+function isRentedSituation(situation) {
+  const s = (situation || '').toString().trim().toLowerCase();
+  return s !== 'returned';
+}
+
+// Finds the customer record currently holding this bike: same bike model,
+// whose "situation" column isn't "Returned". The same bike can have several
+// old, already-returned rows earlier in the sheet — if more than one row
+// still qualifies, the one lowest down / most recently entered in the sheet
+// wins, since that's the actual current booking.
+function findCurrentRenter(bikeName) {
+  if (!customerRows || !customerRows.length) return null;
+  if (!normalizeBikeName(bikeName)) return null;
+
+  const candidates = customerRows
+    .map((r, sheetIndex) => ({ r, sheetIndex }))
+    .filter(({ r }) => bikeNamesMatch(r.bikeModel, bikeName) && isRentedSituation(r.situation));
+
+  if (!candidates.length) return null;
+
+  candidates.sort((a, b) => b.sheetIndex - a.sheetIndex);
+
+  return candidates[0].r;
+}
+
+// Finds the most recent PAST rental of this bike ("situation" = "Returned")
+// with a parseable return date — used to order "not rented" bikes by how
+// recently they came back.
+function findLastReturn(bikeName) {
+  if (!customerRows || !customerRows.length) return null;
+  if (!normalizeBikeName(bikeName)) return null;
+
+  const candidates = customerRows.filter(r => {
+    if (!bikeNamesMatch(r.bikeModel, bikeName)) return false;
+    if (isRentedSituation(r.situation)) return false;
+    return !!parseFlexibleDate(r.returnDate);
+  });
+
+  if (!candidates.length) return null;
+
+  candidates.sort((a, b) => {
+    const da = parseFlexibleDate(a.returnDate) || new Date(0);
+    const db = parseFlexibleDate(b.returnDate) || new Date(0);
+    return db - da;
+  });
+
+  return candidates[0];
+}
+
+// Due-date urgency label for a currently-rented bike: due tomorrow ->
+// "Contact customer", due today -> "Due today", due date already passed ->
+// "Overdue". Anything further out returns null (just show the plain date).
+function getDueLabel(returnDateStr) {
+  const due = parseFlexibleDate(returnDateStr);
+  if (!due) return null;
+  due.setHours(0, 0, 0, 0);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return { text: 'Overdue', cls: 'overdue' };
+  if (diffDays === 0) return { text: 'Due today', cls: 'due-today' };
+  if (diffDays === 1) return { text: 'Contact customer', cls: 'contact' };
+  return null;
+}
+
+// Case-insensitive, multi-word "contains all tokens" matcher — same rule
+// used on the Customer Record search fields.
+function tokenMatch(value, query) {
+  if (!query) return true;
+  const v = (value || '').toString().toLowerCase();
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return tokens.every(t => v.includes(t));
+}
+
+function highlight(value, query) {
+  let out = String(value || '');
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  tokens.forEach(t => {
+    if (!t) return;
+    const re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
+    out = out.replace(re, '<mark>$1</mark>');
+  });
+  return out;
+}
+
+let openReturnRowNumber = null;   // rowNumber whose inline return date-picker is showing
+let savingReturnRowNumber = null; // rowNumber currently being saved as returned
+let openExtendRowNumber = null;   // rowNumber whose inline extend form is showing
+let savingExtendRowNumber = null; // rowNumber currently being saved as extended
+
+function todayIso() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function renterActionsHtml(renter) {
+  const rowNumber = renter.rowNumber;
+
+  if (openReturnRowNumber === rowNumber) {
+    const isSaving = savingReturnRowNumber === rowNumber;
+    return `
+      <div class="bc-actions bc-actions-picker">
+        <input type="date" class="picker-input" id="returnDateInput-${rowNumber}" value="${todayIso()}" ${isSaving ? 'disabled' : ''}>
+        <button class="bc-btn confirm-return" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>${isSaving ? 'Saving…' : 'Confirm'}</button>
+        <button class="bc-btn cancel-return" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>Cancel</button>
+      </div>
+    `;
+  }
+
+  if (openExtendRowNumber === rowNumber) {
+    const isSaving = savingExtendRowNumber === rowNumber;
+    return `
+      <div class="bc-actions bc-actions-picker">
+        <input type="number" min="1" step="1" class="picker-input" id="extendDaysInput-${rowNumber}" placeholder="Days to extend" ${isSaving ? 'disabled' : ''}>
+        <input type="number" min="0" step="any" class="picker-input" id="extendAmountInput-${rowNumber}" placeholder="Amount paid (฿)" ${isSaving ? 'disabled' : ''}>
+        <select class="picker-input" id="extendPaidByInput-${rowNumber}" ${isSaving ? 'disabled' : ''}>
+          <option value="">Paid by…</option>
+          <option value="cash">Cash</option>
+          <option value="scan">QR Scan</option>
+          <option value="wise">Wise</option>
+          <option value="revolut">Revolut</option>
+        </select>
+        <div class="extend-month-row">
+          <input type="checkbox" id="extendMonthCheckbox-${rowNumber}" ${isSaving ? 'disabled' : ''}>
+          <label for="extendMonthCheckbox-${rowNumber}">Extend 1 month</label>
+        </div>
+        <div class="extend-note">1 month, or 30+ days, closes this booking out and starts a fresh rental record for the new period — the amount paid becomes that new record's total price.</div>
+        <button class="bc-btn confirm-extend" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>${isSaving ? 'Saving…' : 'Confirm'}</button>
+        <button class="bc-btn cancel-extend" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>Cancel</button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="bc-actions">
+      <button class="bc-btn return-btn" data-row="${rowNumber}">Return</button>
+      <button class="bc-btn extend-btn" data-row="${rowNumber}">Extend</button>
+    </div>
+  `;
+}
+
+function bikeCardHtml(name, renter, query) {
+  const rented = !!renter;
+  const cls = rented ? 'rented' : 'not-rented';
+  const dueLabel = rented ? getDueLabel(renter.returnDate) : null;
+
+  const renterLine = rented
+    ? `<div class="bc-renter">🧑‍✈️ Rented to: <b>${renter.name || 'Unknown'}</b>${renter.contact ? ' &nbsp;·&nbsp; ' + renter.contact : ''}</div>`
+    : '';
+
+  const dueBadge = dueLabel
+    ? `<span class="due-badge ${dueLabel.cls}">${dueLabel.text}</span>`
+    : '';
+
+  const details = rented
+    ? `<b>Due back:</b> ${formatDateDisplay(renter.returnDate)} ${dueBadge}`
+    : `Not rented`;
+
+  const actions = rented ? renterActionsHtml(renter) : '';
+
+  return `
+    <div class="bike-card ${cls}">
+      <div class="bc-top">
+        <div class="bc-name">${highlight(name, query)}</div>
+        <div class="bc-tag ${cls}">${rented ? 'Rented' : 'Not rented'}</div>
+      </div>
+      ${renterLine}
+      <div class="bc-details">${details}</div>
+      ${actions}
+    </div>
+  `;
+}
+
+function render() {
+  const listBox = document.getElementById('listBox');
+  const countEl = document.getElementById('resultsCount');
+  const query = document.getElementById('bikeSearch').value.trim();
+
+  const matches = bikeNames
+    .filter(name => tokenMatch(name, query))
+    .map(name => {
+      const renter = findCurrentRenter(name);
+      const lastReturn = renter ? null : findLastReturn(name);
+      return { name, renter, lastReturn };
+    });
+
+  // Rented bikes first, soonest due-back at the very top. Not-rented bikes
+  // follow, most-recently-returned first; bikes with no rental history at
+  // all go last, alphabetically.
+  matches.sort((a, b) => {
+    if (a.renter && b.renter) {
+      const da = parseFlexibleDate(a.renter.returnDate) || new Date(8640000000000000);
+      const db = parseFlexibleDate(b.renter.returnDate) || new Date(8640000000000000);
+      return da - db;
+    }
+    if (a.renter && !b.renter) return -1;
+    if (!a.renter && b.renter) return 1;
+
+    const da = a.lastReturn ? parseFlexibleDate(a.lastReturn.returnDate) : null;
+    const db = b.lastReturn ? parseFlexibleDate(b.lastReturn.returnDate) : null;
+    if (da && db) return db - da;
+    if (da && !db) return -1;
+    if (!da && db) return 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  });
+
+  countEl.textContent = matches.length + (matches.length === 1 ? ' bike' : ' bikes');
+
+  if (!matches.length) {
+    listBox.innerHTML = '<div class="empty-hint">No matching bikes.</div>';
+    return;
+  }
+
+  listBox.innerHTML = matches.map(m => bikeCardHtml(m.name, m.renter, query)).join('');
+}
+
+/* ---------------- Search box with live narrowing + autocomplete ---------------- */
+
+const searchInput = document.getElementById('bikeSearch');
+const acList = document.getElementById('bikeAcList');
+let hiIndex = -1;
+
+function closeAc() {
+  acList.classList.remove('show');
+  acList.innerHTML = '';
+  hiIndex = -1;
+}
+
+function openAc(query) {
+  const options = bikeNames.filter(n => tokenMatch(n, query)).slice(0, 8);
+  if (!query || options.length === 0) { closeAc(); return; }
+  acList.innerHTML = options.map((v, i) =>
+    `<div class="ac-item" data-index="${i}">${highlight(v, query)}</div>`
+  ).join('');
+  acList.classList.add('show');
+  hiIndex = -1;
+  Array.from(acList.children).forEach((el, i) => {
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      searchInput.value = options[i];
+      closeAc();
+      render();
+    });
+  });
+  acList._options = options;
+}
+
+searchInput.addEventListener('input', () => {
+  openAc(searchInput.value.trim());
+  render();
+});
+
+searchInput.addEventListener('focus', () => {
+  openAc(searchInput.value.trim());
+});
+
+searchInput.addEventListener('keydown', (e) => {
+  const items = Array.from(acList.children);
+  if (e.key === 'Enter') {
+    // Enter just confirms the current text as the filter (list is already
+    // narrowed live) and closes the suggestion dropdown.
+    e.preventDefault();
+    if (hiIndex >= 0 && acList._options) {
+      searchInput.value = acList._options[hiIndex];
+    }
+    closeAc();
+    render();
+    return;
+  }
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    hiIndex = Math.min(hiIndex + 1, items.length - 1);
+    items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    hiIndex = Math.max(hiIndex - 1, 0);
+    items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+  } else if (e.key === 'Escape') {
+    closeAc();
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!searchInput.contains(e.target) && !acList.contains(e.target)) closeAc();
+});
+
+/* ---------------- Return button + inline date-picker ---------------- */
+
+document.getElementById('listBox').addEventListener('click', (e) => {
+  const returnBtn = e.target.closest('.return-btn');
+  if (returnBtn) {
+    openReturnRowNumber = parseInt(returnBtn.dataset.row, 10);
+    openExtendRowNumber = null;
+    render();
+    return;
+  }
+
+  const cancelBtn = e.target.closest('.cancel-return');
+  if (cancelBtn) {
+    openReturnRowNumber = null;
+    render();
+    return;
+  }
+
+  const confirmBtn = e.target.closest('.confirm-return');
+  if (confirmBtn) {
+    const rowNumber = parseInt(confirmBtn.dataset.row, 10);
+    const input = document.getElementById('returnDateInput-' + rowNumber);
+    const isoDate = input ? input.value : '';
+    if (!isoDate) {
+      alert('Pick a date first.');
+      return;
+    }
+    confirmReturn(rowNumber, isoDate);
+    return;
+  }
+
+  const extendBtn = e.target.closest('.extend-btn');
+  if (extendBtn) {
+    openExtendRowNumber = parseInt(extendBtn.dataset.row, 10);
+    openReturnRowNumber = null;
+    render();
+    return;
+  }
+
+  const cancelExtendBtn = e.target.closest('.cancel-extend');
+  if (cancelExtendBtn) {
+    openExtendRowNumber = null;
+    render();
+    return;
+  }
+
+  const confirmExtendBtn = e.target.closest('.confirm-extend');
+  if (confirmExtendBtn) {
+    const rowNumber = parseInt(confirmExtendBtn.dataset.row, 10);
+    const daysInput = document.getElementById('extendDaysInput-' + rowNumber);
+    const amountInput = document.getElementById('extendAmountInput-' + rowNumber);
+    const monthCheckbox = document.getElementById('extendMonthCheckbox-' + rowNumber);
+    const paidByInput = document.getElementById('extendPaidByInput-' + rowNumber);
+    const extendMonth = !!(monthCheckbox && monthCheckbox.checked);
+    const days = daysInput ? parseInt(daysInput.value, 10) : NaN;
+    const amountRaw = amountInput ? amountInput.value.trim() : '';
+    const paidBy = paidByInput ? paidByInput.value : '';
+    // A blank amount is treated as 0 rather than rejected — for long
+    // extensions (checkbox, or 30+ days) a 0/blank amount gets auto-priced
+    // below in confirmExtend() as a fallback, in case the live auto-fill
+    // listeners didn't get a chance to run.
+    const amount = amountRaw === '' ? 0 : parseFloat(amountRaw);
+    // Days aren't needed when the "Extend 1 month" checkbox is ticked —
+    // the checkbox alone determines the new due date in that case.
+    if (!extendMonth && (!days || days <= 0)) {
+      alert('Enter how many days to extend.');
+      return;
+    }
+    if (isNaN(amount) || amount < 0) {
+      alert('Enter the amount paid.');
+      return;
+    }
+    if (!paidBy) {
+      alert('Select how this extension was paid.');
+      return;
+    }
+    confirmExtend(rowNumber, days, amount, extendMonth, paidBy);
+  }
+});
+
+// Auto-fills the "Amount paid" field on the extend form with the price-
+// calculator quote for the extension period, whenever it's a long extension
+// (the "Extend 1 month" checkbox is ticked, or 30+ days is typed in) and
+// staff haven't already entered a real amount themselves. Runs live as
+// they type/tick, so the field is ready by the time they hit Confirm, but
+// they can still overwrite it before confirming.
+function maybeAutofillExtendAmount(rowNumber) {
+  const daysInput = document.getElementById('extendDaysInput-' + rowNumber);
+  const amountInput = document.getElementById('extendAmountInput-' + rowNumber);
+  const monthCheckbox = document.getElementById('extendMonthCheckbox-' + rowNumber);
+  if (!daysInput || !amountInput || !monthCheckbox) return;
+
+  const extendMonth = monthCheckbox.checked;
+  const days = parseInt(daysInput.value, 10);
+  const isLongExtension = extendMonth || (days >= 30);
+  if (!isLongExtension) return;
+
+  const currentAmount = amountInput.value.trim();
+  if (currentAmount !== '' && parseFloat(currentAmount) !== 0) return; // don't clobber a real entry
+
+  const renter = (customerRows || []).find(r => r.rowNumber === rowNumber);
+  if (!renter) return;
+
+  const price = computeExtendPrice(renter.bikeModel, extendMonth, days);
+  if (price != null) {
+    amountInput.value = price;
+  }
+}
+
+document.getElementById('listBox').addEventListener('input', (e) => {
+  const daysEl = e.target.closest('[id^="extendDaysInput-"]');
+  if (daysEl) {
+    maybeAutofillExtendAmount(parseInt(daysEl.id.replace('extendDaysInput-', ''), 10));
+  }
+});
+
+document.getElementById('listBox').addEventListener('change', (e) => {
+  const monthEl = e.target.closest('[id^="extendMonthCheckbox-"]');
+  if (monthEl) {
+    maybeAutofillExtendAmount(parseInt(monthEl.id.replace('extendMonthCheckbox-', ''), 10));
+  }
+});
+
+function confirmReturn(rowNumber, isoDate) {
+  savingReturnRowNumber = rowNumber;
+  render();
+
+  fetch(scriptUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'markReturned', rowNumber: rowNumber, returnDate: isoDate })
+  })
+    .then(res => res.json())
+    .then(result => {
+      if (!result.success) throw new Error(result.error || 'Could not save.');
+      // Post-write verification problems (the server re-reads what it
+      // wrote and compares) come back as a warning -- the save DID go
+      // through, but something should be checked by hand.
+      if (result.warning) alert('Saved, but: ' + result.warning);
+      openReturnRowNumber = null;
+      savingReturnRowNumber = null;
+
+      // markReturned only ever touches this one customer row (return date,
+      // return time's font color, and situation) -- nothing else shifts or
+      // changes, so the on-page list can be updated directly instead of
+      // waiting on a full reload of the bikes + customer data.
+      const row = (customerRows || []).find(r => r.rowNumber === rowNumber);
+      if (row) {
+        row.returnDate = isoToDmy(isoDate);
+        row.situation = 'Returned';
+        render();
+      } else {
+        // Shouldn't normally happen, but fall back to a full reload rather
+        // than leave the list looking out of date if it ever does.
+        return loadData();
+      }
+    })
+    .catch(err => {
+      savingReturnRowNumber = null;
+      render();
+      alert('Could not mark as returned: ' + err.message);
+    });
+}
+
+// Adds one calendar month to a date, clamping to the last day of the
+// target month when the start date doesn't exist there (e.g. Jan 31 + 1
+// month lands on Feb 28/29, not Mar 3).
+function addOneCalendarMonth(date) {
+  const d = new Date(date.getTime());
+  const startDay = d.getDate();
+  d.setMonth(d.getMonth() + 1);
+  if (d.getDate() !== startDay) {
+    d.setDate(0);
+  }
+  return d;
+}
+
+function toIsoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// A long extension (1-month checkbox, or 30+ days typed in) doesn't just
+// push the due date on the existing booking — it closes that booking out
+// (using its current due date, unchanged, as the point it ended) and hands
+// off to the Customer Record form to start a brand-new rental record for
+// the extension period, prefilled from this booking's details. The
+// checkbox takes precedence over the days field if both are given.
+function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy) {
+  const isLongExtension = extendMonth || (daysToExtend >= 30);
+
+  if (isLongExtension) {
+    const renter = (customerRows || []).find(r => r.rowNumber === rowNumber);
+    if (!renter) {
+      alert("Could not find this booking's details — try refreshing the page.");
+      return;
+    }
+    const oldDue = parseFlexibleDate(renter.returnDate);
+    if (!oldDue) {
+      alert('Could not read the current due date to extend from.');
+      return;
+    }
+    const newReturn = extendMonth
+      ? addOneCalendarMonth(oldDue)
+      : new Date(oldDue.getTime() + daysToExtend * 86400000);
+
+    // Fallback in case the live auto-fill listeners didn't get a chance to
+    // run (e.g. Confirm clicked immediately after ticking the checkbox):
+    // price the extension period from the bike's category rate if nothing
+    // was entered.
+    let finalAmount = amountPaid;
+    if (!finalAmount) {
+      const autoPrice = computeExtendPrice(renter.bikeModel, extendMonth, daysToExtend);
+      if (autoPrice != null) {
+        finalAmount = autoPrice;
+      } else {
+        alert("Couldn't auto-calculate a price for \"" + renter.bikeModel + "\" (no matching category found) — you'll need to enter the total price by hand on the next screen.");
+      }
+    }
+
+    savingExtendRowNumber = rowNumber;
+    render();
+
+    fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'closeBikeForExtend', rowNumber: rowNumber })
+    })
+      .then(res => res.json())
+      .then(result => {
+        if (!result.success) throw new Error(result.error || 'Could not close out the old booking.');
+        // Post-write verification problems come back as a warning -- the
+        // close-out DID go through, but something should be checked by hand.
+        if (result.warning) alert('Old booking closed, but: ' + result.warning);
+        const params = new URLSearchParams({
+          contact: renter.contact || '',
+          name: renter.name || '',
+          nationality: renter.nationality || '',
+          passport: renter.passport || '',
+          bikeModel: renter.bikeModel || '',
+          rentingDateFrom: toIsoDate(oldDue),
+          returnDate: toIsoDate(newReturn),
+          returnTime: renter.returnTime || '',
+          deliverToHotel: renter.deliverToHotel || '',
+          totalPrice: String(finalAmount),
+          paidBy: paidBy || renter.paidBy || '',
+          source: 'extend'
+        });
+        window.location.href = 'customers.html?' + params.toString();
+      })
+      .catch(err => {
+        savingExtendRowNumber = null;
+        render();
+        alert('Could not extend: ' + err.message);
+      });
+    return;
+  }
+
+  // Short extension (under 30 days, checkbox not ticked): simple in-place
+  // update, same as before.
+  savingExtendRowNumber = rowNumber;
+  render();
+
+  fetch(scriptUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'extendBike', rowNumber: rowNumber, daysToExtend: daysToExtend, amountPaid: amountPaid, paidBy: paidBy })
+  })
+    .then(res => res.json())
+    .then(result => {
+      if (!result.success) throw new Error(result.error || 'Could not save.');
+      // Post-write verification problems (the server re-reads everything
+      // it wrote -- customer row, income row, cash row, bikes/deposit
+      // totals -- and compares) come back as a warning: the extension DID
+      // save, but something should be checked by hand.
+      if (result.warning) alert('Extended, but: ' + result.warning);
+      openExtendRowNumber = null;
+      savingExtendRowNumber = null;
+      return loadData();
+    })
+    .catch(err => {
+      savingExtendRowNumber = null;
+      render();
+      alert('Could not extend: ' + err.message);
+    });
+}
+
+loadData();
+</script>
+
+
+<script>
+/* ---- Date-in-words labels (shared across all pages) ----
+   Every <input type="date"> gets a small red label right after it that
+   writes the selected date out in words -- e.g. "8 July 2026" -- so a
+   date like 08/07 can never be misread as August 7 (American style).
+   You still pick the date in the box exactly as before; this only
+   changes what's DISPLAYED, never what's saved to the sheet.
+   Handles date boxes created later (e.g. the Return picker on Bikes
+   Status) via a DOM observer, and values set by code (prefills,
+   defaults) via a light polling loop. */
+(function () {
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function dateWords(iso) {
+    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(iso || '');
+    if (!m) return '';
+    var monthIdx = parseInt(m[2], 10) - 1;
+    if (monthIdx < 0 || monthIdx > 11) return '';
+    return parseInt(m[3], 10) + ' ' + MONTHS[monthIdx] + ' ' + parseInt(m[1], 10);
+  }
+
+  function ensureLabel(inp) {
+    var el = inp.__dateWordsEl;
+    if (el && el.parentNode) return el;
+    el = document.createElement('span');
+    el.className = 'date-words-label';
+    el.style.cssText = 'display:inline-block;font-size:12.5px;font-weight:700;' +
+      'color:#C62828;margin-top:3px;margin-left:2px;line-height:1.25;white-space:nowrap;';
+    if (inp.nextSibling) {
+      inp.parentNode.insertBefore(el, inp.nextSibling);
+    } else {
+      inp.parentNode.appendChild(el);
+    }
+    inp.__dateWordsEl = el;
+    return el;
+  }
+
+  function refreshDateWordLabels() {
+    var inputs = document.querySelectorAll('input[type="date"]');
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      if (!inp.parentNode) continue;
+      var el = ensureLabel(inp);
+      var text = dateWords(inp.value);
+      if (el.textContent !== text) el.textContent = text;
+    }
+  }
+
+  // React immediately when the user picks/types a date.
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+
+  // Catch date boxes that get created after page load (re-rendered lists,
+  // pop-up pickers). refreshDateWordLabels is idempotent, so the observer
+  // re-firing on its own label insertions settles immediately.
+  if (window.MutationObserver) {
+    new MutationObserver(refreshDateWordLabels)
+      .observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  // Catch values set by code (defaults, prefills from other pages), which
+  // fire no events. A few date boxes at 2 checks/second costs nothing.
+  setInterval(refreshDateWordLabels, 500);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshDateWordLabels);
+  } else {
+    refreshDateWordLabels();
+  }
+})();
+</script>
+
+</body>
+</html>

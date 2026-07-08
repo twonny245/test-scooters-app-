@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bike Name Audit — AA Scooters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sand:#F5EFE6;
+    --ink:#1A2421;
+    --petrol:#0F3D3E;
+    --petrol-light:#175A5B;
+    --cone:#FF6B35;
+    --card:#FFFFFF;
+    --line:#DED4C2;
+    --muted:#5A6663;
+    --ok:#2F855A;
+    --warn:#B7791F;
+    --bad:#C53030;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--sand); color:var(--ink);
+    font-family:'Inter',sans-serif; min-height:100vh;
+  }
+  .topbar{
+    background:var(--petrol); padding:14px 16px; display:flex;
+    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .topbar .brand{ display:flex; align-items:center; gap:8px; text-decoration:none; }
+  .topbar .brand img{ width:28px; height:28px; object-fit:contain; }
+  .topbar .brand span{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
+    color:#fff; letter-spacing:.02em;
+  }
+  .page-head{ max-width:640px; margin:0 auto; padding:22px 16px 4px; }
+  .page-head h1{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
+    color:var(--petrol); margin:0;
+  }
+  .page-head .sub{ color:var(--muted); font-size:13px; margin-top:6px; line-height:1.5; }
+
+  main{ max-width:640px; margin:0 auto; padding:16px 16px 60px; }
+
+  .load-status{
+    font-size:12px; color:#B36A2E; background:#FFF3E6; border:1px solid #F3D9B8;
+    border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none;
+  }
+  .load-status.show{ display:block; }
+
+  .run-btn{
+    width:100%; padding:14px; border:none; border-radius:10px;
+    background:var(--cone); color:#fff; font-family:'Barlow Condensed',sans-serif;
+    font-weight:700; font-size:16px; letter-spacing:.03em; text-transform:uppercase;
+    cursor:pointer; margin-bottom:18px;
+  }
+  .run-btn:active{ transform:scale(.98); }
+  .run-btn:disabled{ opacity:.6; }
+
+  .summary{
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;
+  }
+  .summary .stat{
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px;
+  }
+  .summary .stat .n{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:24px;
+  }
+  .summary .stat .l{ font-size:11.5px; color:var(--muted); margin-top:2px; }
+  .summary .stat.ok .n{ color:var(--ok); }
+  .summary .stat.warn .n{ color:var(--warn); }
+  .summary .stat.bad .n{ color:var(--bad); }
+
+  .section{ margin-bottom:22px; }
+  .section h2{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:17px;
+    color:var(--petrol); margin:0 0 4px;
+  }
+  .section .desc{ font-size:12.5px; color:var(--muted); margin-bottom:10px; line-height:1.5; }
+
+  .row{
+    background:var(--card); border:1px solid var(--line); border-left:5px solid var(--line);
+    border-radius:9px; padding:10px 12px; margin-bottom:8px; font-size:13.5px;
+  }
+  .row.warn{ border-left-color:var(--warn); }
+  .row.bad{ border-left-color:var(--bad); }
+  .row.ok{ border-left-color:var(--ok); }
+  .row b{ color:var(--petrol); }
+  .row .meta{ color:var(--muted); font-size:12px; margin-top:3px; }
+
+  .empty-hint{ font-size:13px; color:#8A948F; padding:8px 2px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="index.html">
+    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
+    <span>AA Scooter Rental</span>
+  </a>
+</div>
+
+<div class="page-head">
+  <h1>Bike Name Audit</h1>
+  <div class="sub">Checks whether bike names in the Parts &amp; Oil sheet and the Customer sheet all line up with the Bike Tax sheet (the source of truth). Any bike missing from Bike Tax is treated as sold.</div>
+</div>
+
+<main>
+  <button class="run-btn" id="runBtn">Run audit</button>
+  <div class="load-status" id="loadStatus"></div>
+  <div id="results"></div>
+</main>
+
+<script>
+const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
+
+function setLoadStatus(msg) {
+  const el = document.getElementById('loadStatus');
+  if (!msg) { el.classList.remove('show'); el.textContent=''; return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+// Same fuzzy-match rules as bikes.html / Code.gs, so this audit reflects
+// exactly what the live pages would consider "the same bike".
+function normalizeBikeName(s) {
+  return (s || '').toString()
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+const DISTINGUISHING_SUFFIXES = new Set([
+  'one','two','three','four','five','six','seven','eight','nine','ten',
+  'i','ii','iii','iv','v','vi','vii','viii','ix','x',
+  '1','2','3','4','5','6','7','8','9','10'
+]);
+
+function bikeNamesMatch(a, b) {
+  const na = normalizeBikeName(a);
+  const nb = normalizeBikeName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+
+  const ta = na.split(' ');
+  const tb = nb.split(' ');
+  const shorter = ta.length <= tb.length ? ta : tb;
+  const longer = ta.length <= tb.length ? tb : ta;
+
+  const isPrefix = shorter.every((tok, i) => tok === longer[i]);
+  if (isPrefix) {
+    const extra = longer.slice(shorter.length);
+    if (extra.some(t => DISTINGUISHING_SUFFIXES.has(t))) return false;
+    return true;
+  }
+
+  return na.includes(nb) || nb.includes(na);
+}
+
+function rowHtml(cls, title, meta) {
+  return `<div class="row ${cls}"><div>${title}</div>${meta ? `<div class="meta">${meta}</div>` : ''}</div>`;
+}
+
+async function runAudit() {
+  const btn = document.getElementById('runBtn');
+  const results = document.getElementById('results');
+  btn.disabled = true;
+  results.innerHTML = '';
+  setLoadStatus('Loading Bike Tax, Parts, and Customer data…');
+
+  try {
+    const [partsRes, custRes] = await Promise.all([
+      fetch(scriptUrl + '?action=parts').then(r => r.json()),
+      fetch(scriptUrl).then(r => r.json()).catch(err => ({ success: false, error: err.message }))
+    ]);
+
+    if (!partsRes.success) throw new Error(partsRes.error || 'Could not load Parts/Bike Tax data');
+
+    const partsHeader = partsRes.headers[0];
+    const partsRows = partsRes.rows
+      .map(r => ({ name: (r[partsHeader] || '').toString().trim(), struck: !!r.__struck }))
+      .filter(r => r.name);
+    const partsNames = partsRows.map(r => r.name);
+    const hasStrikeInfo = partsRes.rows.some(r => Object.prototype.hasOwnProperty.call(r, '__struck'));
+
+    const bikeTaxNames = (partsRes.categoryRows || [])
+      .map(r => (r.bike || '').toString().trim())
+      .filter(Boolean);
+
+    const customerBikeModels = (custRes && custRes.success)
+      ? custRes.rows.map(r => (r.bikeModel || '').toString().trim()).filter(Boolean)
+      : [];
+
+    if (!(custRes && custRes.success)) {
+      setLoadStatus('Warning: could not load Customer sheet (' + (custRes && custRes.error ? custRes.error : 'unknown error') + '). Customer-side checks skipped.');
+    } else {
+      setLoadStatus(null);
+    }
+
+    // Dedupe helper: unique names + count of occurrences (for customer records)
+    function uniqueCount(list) {
+      const map = new Map();
+      list.forEach(n => map.set(n, (map.get(n) || 0) + 1));
+      return map;
+    }
+
+    // 1. Parts sheet bikes not in Bike Tax. Split by strikethrough: struck
+    // rows are the expected/already-marked-sold case; non-struck rows that
+    // still don't match Bike Tax are the real problem to fix.
+    const uniquePartsRows = [...new Map(partsRows.map(r => [r.name, r])).values()];
+    const partsNotInTaxAll = uniquePartsRows.filter(
+      r => !bikeTaxNames.some(tn => bikeNamesMatch(r.name, tn))
+    );
+    const partsNotInTaxStruck = partsNotInTaxAll.filter(r => r.struck);
+    const partsNotInTaxUnstruck = partsNotInTaxAll.filter(r => !r.struck);
+
+    // 2. Bike Tax bikes not in Parts sheet -> missing parts row
+    const taxNotInParts = [...new Set(bikeTaxNames)].filter(
+      tn => !partsNames.some(pn => bikeNamesMatch(pn, tn))
+    );
+
+    // 3. Bike Tax names that fuzzy-match MORE than one Parts row (ambiguous)
+    const ambiguousTax = [...new Set(bikeTaxNames)]
+      .map(tn => ({ tn, matches: [...new Set(partsNames)].filter(pn => bikeNamesMatch(pn, tn)) }))
+      .filter(x => x.matches.length > 1);
+
+    // 4. Customer bikeModel entries not matching any Bike Tax bike
+    const custCounts = uniqueCount(customerBikeModels);
+    const custNotInTax = [...custCounts.entries()].filter(
+      ([name]) => name && !bikeTaxNames.some(tn => bikeNamesMatch(tn, name))
+    );
+
+    // Summary numbers
+    const html = [];
+    const inconsistencyCount = taxNotInParts.length + custNotInTax.length + ambiguousTax.length + partsNotInTaxUnstruck.length;
+
+    html.push(`<div class="summary">
+      <div class="stat ok"><div class="n">${bikeTaxNames.length}</div><div class="l">Bikes in Bike Tax (active fleet)</div></div>
+      <div class="stat"><div class="n">${partsNames.length}</div><div class="l">Rows in Parts &amp; Oil</div></div>
+      <div class="stat warn"><div class="n">${partsNotInTaxStruck.length}</div><div class="l">Struck-through &amp; not in Bike Tax (expected)</div></div>
+      <div class="stat bad"><div class="n">${inconsistencyCount}</div><div class="l">Inconsistencies needing a look</div></div>
+    </div>`);
+
+    if (!hasStrikeInfo) {
+      html.push(`<div class="row bad"><div><b>Backend not updated yet</b> — this audit can't tell struck-through rows apart from real problems until Code.gs is updated to report strikethrough and the web app is redeployed. Everything below is currently lumped into "not struck-through."</div></div>`);
+    }
+
+    // Section: Parts not in Bike Tax, struck through (expected/sold)
+    html.push(`<div class="section"><h2>Confirmed sold — struck through, not in Bike Tax</h2>
+      <div class="desc">Expected. These already have the strikethrough marking them sold, and correctly don't appear in Bike Tax. No action needed — they'll simply stop showing up once pages switch to Bike Tax as the source of bike names.</div>`);
+    if (partsNotInTaxStruck.length) {
+      partsNotInTaxStruck.forEach(r => html.push(rowHtml('ok', r.name)));
+    } else {
+      html.push(`<div class="empty-hint">None.</div>`);
+    }
+    html.push(`</div>`);
+
+    // Section: Parts not in Bike Tax, NOT struck through (real problem)
+    html.push(`<div class="section"><h2>⚠️ Needs a look — not struck through, but missing from Bike Tax</h2>
+      <div class="desc">These look active in the Parts sheet (no strikethrough) but have no matching entry in Bike Tax. Either the Bike Tax sheet is missing a row for a real bike, or the name is spelled differently between the two sheets.</div>`);
+    if (partsNotInTaxUnstruck.length) {
+      partsNotInTaxUnstruck.forEach(r => html.push(rowHtml('bad', r.name)));
+    } else {
+      html.push(`<div class="empty-hint">None — every active (non-struck-through) Parts row matches a Bike Tax bike.</div>`);
+    }
+    html.push(`</div>`);
+
+    // Section: Bike Tax not in Parts (real inconsistency)
+    html.push(`<div class="section"><h2>In Bike Tax, missing from Parts &amp; Oil</h2>
+      <div class="desc">These are active per Bike Tax but have no Parts/Oil row, so switching the source of truth would show them with no oil/parts history.</div>`);
+    if (taxNotInParts.length) {
+      taxNotInParts.forEach(n => html.push(rowHtml('bad', n)));
+    } else {
+      html.push(`<div class="empty-hint">None — every Bike Tax bike has a matching Parts row.</div>`);
+    }
+    html.push(`</div>`);
+
+    // Section: Ambiguous matches
+    html.push(`<div class="section"><h2>Ambiguous matches</h2>
+      <div class="desc">A Bike Tax name that loosely matches more than one Parts row — worth checking these aren't actually two different bikes being merged into one.</div>`);
+    if (ambiguousTax.length) {
+      ambiguousTax.forEach(x => html.push(rowHtml('warn', x.tn, 'Matches: ' + x.matches.join(', '))));
+    } else {
+      html.push(`<div class="empty-hint">None found.</div>`);
+    }
+    html.push(`</div>`);
+
+    // Section: Customer records not matching Bike Tax
+    html.push(`<div class="section"><h2>Customer records with an unrecognized bike name</h2>
+      <div class="desc">Bike names typed into the Customer sheet that don't match any current Bike Tax bike — could be a typo, or a rental logged against a bike that's since been sold.</div>`);
+    if (custNotInTax.length) {
+      custNotInTax
+        .sort((a, b) => b[1] - a[1])
+        .forEach(([name, count]) => html.push(rowHtml('bad', name, count + ' customer row' + (count === 1 ? '' : 's'))));
+    } else if (custRes && custRes.success) {
+      html.push(`<div class="empty-hint">None — every Customer bike model matches a Bike Tax bike.</div>`);
+    } else {
+      html.push(`<div class="empty-hint">Skipped — Customer sheet failed to load.</div>`);
+    }
+    html.push(`</div>`);
+
+    results.innerHTML = html.join('');
+
+  } catch (err) {
+    setLoadStatus('Audit failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('runBtn').addEventListener('click', runAudit);
+runAudit();
+</script>
+
+</body>
+</html>

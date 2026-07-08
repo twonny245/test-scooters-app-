@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="AA Scooters" />
+  <meta name="theme-color" content="#0F3D3E" />
+  <title>AA Scooter Rental — Price Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- PWA Manifest inline -->
+  <script>
+    const manifest = {
+      name: "AA Scooter Rental Calculator",
+      short_name: "AA Scooters",
+      start_url: ".",
+      display: "standalone",
+      background_color: "#F5EFE6",
+      theme_color: "#0F3D3E",
+      icons: [{
+        src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23FF6B35'/><text y='.9em' font-size='72' x='50%' dominant-baseline='middle' text-anchor='middle'>🏍️</text></svg>",
+        sizes: "192x192",
+        type: "image/svg+xml"
+      }]
+    };
+    const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('link');
+    link.rel = 'manifest';
+    link.href = url;
+    document.head.appendChild(link);
+  </script>
+
+  <style>
+    :root{
+      --sand:#F5EFE6;
+      --ink:#1A2421;
+      --petrol:#0F3D3E;
+      --petrol-light:#175A5B;
+      --cone:#FF6B35;
+      --card:#FFFFFF;
+      --line:#DED4C2;
+      --muted:#5A6663;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
+      background: var(--sand);
+      font-family:'Inter',sans-serif;
+      color: var(--ink);
+    }
+
+    .topbar{
+      background:var(--petrol);
+      padding:14px 16px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+      gap:10px;
+    }
+    .topbar .brand{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      text-decoration:none;
+    }
+    .topbar .brand img{
+      width:28px; height:28px;
+      object-fit:contain;
+    }
+    .topbar .brand span{
+      font-family:'Barlow Condensed',sans-serif;
+      font-weight:700;
+      font-size:15px;
+      color:#fff;
+      letter-spacing:.02em;
+    }
+    .topbar nav{
+      display:flex;
+      gap:16px;
+      flex-wrap:wrap;
+    }
+    .topbar nav a{
+      color:#CFE3E0;
+      text-decoration:none;
+      font-size:12.5px;
+      font-weight:500;
+      padding:3px 0;
+      border-bottom:2px solid transparent;
+    }
+    .topbar nav a:hover{ color:#fff; }
+    .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
+    .page-head{
+      max-width:520px;
+      margin:0 auto;
+      padding:22px 16px 4px;
+    }
+    .page-head h1{
+      font-family:'Barlow Condensed',sans-serif;
+      font-weight:700;
+      font-size:26px;
+      color:var(--petrol);
+      margin:0;
+    }
+    .page-head .sub{
+      color:var(--muted);
+      font-size:13px;
+      margin-top:6px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 8px 16px 60px;
+    }
+
+    /* Card */
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      margin-bottom: 16px;
+    }
+
+    .section-label {
+      font-family:'Barlow Condensed',sans-serif;
+      color: #7A8A86;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 1.1px;
+      text-transform: uppercase;
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    /* Category buttons */
+    .cat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .cat-btn {
+      background: #FBFAF7;
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      padding: 11px 12px;
+      color: var(--muted);
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s;
+      -webkit-tap-highlight-color: transparent;
+      line-height: 1.3;
+    }
+    .cat-btn.active {
+      background: var(--petrol);
+      border-color: var(--petrol);
+      color: #fff;
+      font-weight: 600;
+    }
+    .cat-btn .icon { font-size: 18px; flex-shrink: 0; }
+
+    /* Date inputs */
+    .date-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .date-field label { display: block; }
+    .date-field input[type="date"] {
+      width: 100%;
+      background: #FBFAF7;
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: var(--ink);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      margin-top: 8px;
+    }
+    .date-field input[type="date"]:focus{ border-color: var(--petrol-light); background:#fff; }
+
+    /* Duration pill */
+    .duration-pill {
+      background: #FBF6EC;
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      padding: 9px 14px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .duration-pill span:first-child {
+      font-family:'Barlow Condensed',sans-serif;
+      letter-spacing:.06em; text-transform:uppercase;
+      color: #7A8A86; font-size: 12.5px;
+    }
+    .duration-pill span:last-child { color: var(--petrol); font-size: 14px; font-weight: 700; }
+
+    /* Custom rate input */
+    .custom-rate-box { margin-bottom: 24px; }
+    .custom-rate-box .rate-input-wrap { position: relative; }
+    .custom-rate-box .currency-prefix {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      color: var(--muted); font-size: 14px; pointer-events: none;
+    }
+    .custom-rate-box input[type="number"] {
+      width: 100%;
+      background: #FBFAF7;
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px 10px 28px;
+      color: var(--ink);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+    }
+    .custom-rate-box input[type="number"]:focus { border-color: var(--petrol-light); background:#fff; }
+    .custom-rate-box .rate-hint { color: var(--muted); font-size: 11px; margin-top: 6px; }
+
+    /* Calculate button */
+    .calc-btn {
+      width: 100%;
+      background: var(--cone);
+      border: none;
+      border-radius: 10px;
+      padding: 15px;
+      color: #fff;
+      font-family:'Barlow Condensed',sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: transform 0.1s, opacity .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .calc-btn:disabled {
+      background: #C9B9A8;
+      color: #fff;
+      cursor: not-allowed;
+    }
+    .calc-btn:not(:disabled):active { transform: scale(0.98); }
+
+    /* Result card */
+    .result-card {
+      background: var(--card);
+      border: 1px solid var(--cone);
+      border-radius: 14px;
+      padding: 22px;
+      animation: slideUp 0.35s ease;
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-label {
+      font-family:'Barlow Condensed',sans-serif;
+      color: #7A8A86; font-size: 11.5px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase; margin-bottom: 6px;
+    }
+    .result-price {
+      font-family:'Barlow Condensed',sans-serif;
+      color: var(--cone); font-size: 44px; font-weight: 800; letter-spacing: -0.5px; line-height: 1; margin-bottom: 18px;
+    }
+
+    .result-rows { border-top: 1px solid var(--line); padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .result-row { display: flex; justify-content: space-between; align-items: center; }
+    .result-row .key { color: var(--muted); font-size: 13px; }
+    .result-row .val { color: var(--ink); font-size: 13px; font-weight: 600; }
+
+    .extra-note {
+      margin-top: 12px;
+      background: #FFF3E6;
+      border: 1px solid #F3D9B8;
+      border-radius: 8px;
+      padding: 9px 12px;
+      color: #B36A2E;
+      font-size: 11.5px;
+      line-height: 1.5;
+    }
+
+    /* Extra days adjuster */
+    .extra-days-box {
+      margin-top: 16px;
+      border-top: 1px solid var(--line);
+      padding-top: 16px;
+    }
+    .extra-days-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .extra-days-row input[type="number"] {
+      width: 72px;
+      background: #FBFAF7;
+      border: 1.5px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: var(--ink);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      text-align: center;
+    }
+    .extra-days-row input[type="number"]:focus { border-color: var(--petrol-light); background:#fff; }
+    .extra-days-hint { color: var(--muted); font-size: 12px; }
+
+    .calc-extra-btn {
+      width: 100%;
+      background: #fff;
+      border: 1.5px solid var(--petrol);
+      border-radius: 10px;
+      padding: 11px;
+      color: var(--petrol);
+      font-size: 13px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      margin-top: 12px;
+      letter-spacing: 0.2px;
+      transition: opacity 0.15s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .calc-extra-btn:active { transform: scale(0.98); opacity: 0.85; }
+
+    /* Standalone extra-days-cost card */
+    .extra-result-card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 22px;
+      margin-top: 14px;
+      animation: slideUp 0.35s ease;
+    }
+    .extra-result-price {
+      font-family:'Barlow Condensed',sans-serif;
+      color: var(--petrol); font-size: 30px; font-weight: 800; letter-spacing: -0.5px; line-height: 1; margin-bottom: 8px;
+    }
+    .extra-result-detail { color: var(--muted); font-size: 13px; }
+
+    .footer { color: #9AA6A1; font-size: 11px; text-align: center; margin-top: 20px; }
+
+    .lock-screen{
+      position:fixed; inset:0; z-index:9999;
+      background:var(--sand);
+      display:flex; align-items:center; justify-content:center;
+      padding:20px;
+    }
+    .lock-card{
+      background:var(--card);
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:28px 24px;
+      max-width:320px;
+      width:100%;
+      text-align:center;
+    }
+    .lock-icon{ font-size:32px; margin-bottom:10px; }
+    .lock-card h2{
+      font-family:'Barlow Condensed',sans-serif;
+      font-weight:700;
+      font-size:22px;
+      color:var(--petrol);
+      margin:0 0 6px;
+    }
+    .lock-card p{
+      font-size:13px;
+      color:var(--muted);
+      margin:0 0 18px;
+    }
+    .lock-card input{
+      width:100%;
+      padding:11px 12px;
+      border:1px solid var(--line);
+      border-radius:9px;
+      font-size:15px;
+      font-family:'Inter',sans-serif;
+      background:#FBFAF7;
+      color:var(--ink);
+      margin-bottom:12px;
+      text-align:center;
+      box-sizing:border-box;
+    }
+    .lock-card input:focus{ outline:none; border-color:var(--petrol-light); background:#fff; }
+    .lock-card button{
+      width:100%;
+      padding:12px;
+      border:none;
+      border-radius:10px;
+      background:var(--cone);
+      color:#fff;
+      font-family:'Barlow Condensed',sans-serif;
+      font-weight:700;
+      font-size:15px;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+      cursor:pointer;
+    }
+    .lock-card button:active{ transform:scale(.98); }
+    .lock-error{
+      display:none;
+      margin-top:12px;
+      font-size:12.5px;
+      color:#C53030;
+    }
+  </style>
+</head>
+<body>
+
+<div class="lock-screen" id="lockScreen">
+  <div class="lock-card">
+    <div class="lock-icon">🔒</div>
+    <h2>Staff Access</h2>
+    <p>Enter the password to continue</p>
+    <input type="password" id="lockPassword" placeholder="Password" autocomplete="off">
+    <button id="lockSubmit" type="button">Unlock</button>
+    <div class="lock-error" id="lockError">Incorrect password — try again.</div>
+  </div>
+</div>
+<script>
+(function(){
+  var PASSWORD = "Aerox2016";
+  var lock = document.getElementById('lockScreen');
+  if (sessionStorage.getItem('aa_unlocked') === '1') {
+    lock.style.display = 'none';
+  }
+  function tryUnlock(){
+    var val = document.getElementById('lockPassword').value;
+    if (val === PASSWORD) {
+      sessionStorage.setItem('aa_unlocked', '1');
+      lock.style.display = 'none';
+    } else {
+      document.getElementById('lockError').style.display = 'block';
+      document.getElementById('lockPassword').value = '';
+      document.getElementById('lockPassword').focus();
+    }
+  }
+  document.getElementById('lockSubmit').addEventListener('click', tryUnlock);
+  document.getElementById('lockPassword').addEventListener('keydown', function(e){
+    if (e.key === 'Enter') tryUnlock();
+  });
+})();
+</script>
+<div class="topbar">
+  <a class="brand" href="index.html">
+    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
+    <span>AA Scooter Rental</span>
+  </a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="customers.html">Customer Record</a>
+    <a href="pricing.html" class="active">Price Calculator</a>
+    <a href="parts.html">Parts &amp; Oil</a>
+    <a href="oilchange.html">Oil Change</a>
+    <a href="bikes.html">Bikes Status</a>
+    <a href="bikephotos.html">Bike Photos</a>
+    <a href="available-bikes.html">Available Bikes</a>
+    <a href="accounts.html">Accounts</a>
+  </nav>
+</div>
+
+<div class="page-head">
+  <h1>Price Calculator</h1>
+  <div class="sub">Work out a rental quote by bike and date range</div>
+</div>
+
+<div class="container">
+
+  <div class="card">
+    <span class="section-label">Bike Category</span>
+    <div class="cat-grid" id="catGrid"></div>
+
+    <div class="custom-rate-box" id="customRateBox" style="display:none">
+      <span class="section-label" for="customRateInput">Custom Monthly Rate</span>
+      <div class="rate-input-wrap">
+        <span class="currency-prefix">฿</span>
+        <input type="number" id="customRateInput" min="1" step="1" inputmode="numeric" placeholder="e.g. 3500" />
+      </div>
+      <div class="rate-hint">Daily rate is this ÷ 30, scaled to your rental length.</div>
+    </div>
+
+    <span class="section-label">Rental Dates</span>
+    <div class="date-grid">
+      <div class="date-field">
+        <label class="section-label" for="fromDate">Rented From</label>
+        <input type="date" id="fromDate" />
+      </div>
+      <div class="date-field">
+        <label class="section-label" for="toDate">Return Date</label>
+        <input type="date" id="toDate" />
+      </div>
+    </div>
+
+    <div class="duration-pill" id="durationPill" style="display:none">
+      <span>Rental duration</span>
+      <span id="durationText"></span>
+    </div>
+
+    <button class="calc-btn" id="calcBtn" disabled onclick="calculate()">
+      Calculate Price
+    </button>
+  </div>
+
+  <div id="result" style="display:none" class="result-card">
+    <div class="result-label">Total Rental Cost</div>
+    <div class="result-price" id="resultPrice"></div>
+    <div class="result-rows">
+      <div class="result-row"><span class="key">Bike</span><span class="val" id="rBike"></span></div>
+      <div class="result-row"><span class="key">From</span><span class="val" id="rFrom"></span></div>
+      <div class="result-row"><span class="key">To</span><span class="val" id="rTo"></span></div>
+      <div class="result-row"><span class="key">Duration</span><span class="val" id="rDays"></span></div>
+      <div class="result-row"><span class="key">Per day avg</span><span class="val" id="rAvg"></span></div>
+    </div>
+    <div class="extra-note" id="extraNote" style="display:none">
+      Rentals of a month or longer: monthly rate × number of months + (monthly rate ÷ 30) for each extra day, based on the actual length of that calendar month.
+    </div>
+
+    <div class="extra-days-box">
+      <span class="section-label">Add Extra Days</span>
+      <div class="extra-days-row">
+        <input type="number" id="extraDaysInput" min="0" step="1" inputmode="numeric" value="0" />
+        <span class="extra-days-hint">days × per-day avg rate</span>
+      </div>
+      <button class="calc-extra-btn" id="calcExtraBtn" onclick="calculateExtra()">
+        Calculate Extra Days Cost
+      </button>
+    </div>
+  </div>
+
+  <div id="extraResult" style="display:none" class="extra-result-card">
+    <div class="result-label">Extra Days Cost</div>
+    <div class="extra-result-price" id="extraResultPrice"></div>
+    <div class="extra-result-detail" id="extraResultDetail"></div>
+
+    <div class="extra-days-box">
+      <span class="section-label">Or Use a Custom Daily Rate</span>
+      <div class="custom-rate-box" style="margin-bottom:0">
+        <div class="rate-input-wrap">
+          <span class="currency-prefix">฿</span>
+          <input type="number" id="customDailyRateInput" min="1" step="1" inputmode="numeric" placeholder="e.g. 150" />
+        </div>
+      </div>
+      <button class="calc-extra-btn" id="calcCustomRateBtn" onclick="calculateExtraCustom()">
+        Recalculate with Custom Rate
+      </button>
+    </div>
+
+    <div id="customRateResult" style="display:none; margin-top:16px; border-top:1px solid var(--line); padding-top:16px">
+      <div class="extra-result-price" id="customRateResultPrice" style="font-size:26px"></div>
+      <div class="extra-result-detail" id="customRateResultDetail"></div>
+    </div>
+  </div>
+
+  <p class="footer">Prices in Thai Baht (฿) · Rates from AA Scooter Account 2026</p>
+</div>
+
+<script>
+const CATEGORIES = [
+  { name: "125CC",                   label: "125CC",              icon: "🛵" },
+  { name: "150-155CC Standard Key",  label: "155CC Standard Key", icon: "🛵" },
+  { name: "150-155CC Keyless",       label: "155CC Keyless",      icon: "🛵" },
+  { name: "Nmax 155CC Keyless",      label: "Nmax 155CC",         icon: "🏍️" },
+  { name: "Forza 300CC",             label: "Forza 300CC",        icon: "🏍️" },
+  { name: "XMAX 300 Keyless",        label: "XMAX 300",           icon: "🏍️" },
+  { name: "Custom Rate",             label: "Custom Rate",        icon: "💰", custom: true },
+];
+
+const RATES = {
+  1:[300,400,450,500,600,800],2:[600,800,900,1000,1200,1600],
+  3:[900,1200,1300,1400,1800,2400],4:[1000,1300,1500,1600,2300,3100],
+  5:[1100,1500,1800,1900,2800,3800],6:[1200,1700,1900,2000,3300,4500],
+  7:[1300,1800,2000,2100,3800,5100],8:[1400,1900,2100,2200,4200,5700],
+  9:[1500,2000,2200,2300,4600,6300],10:[1600,2200,2300,2400,5000,6800],
+  11:[1700,2300,2400,2500,5400,7300],12:[1800,2400,2500,2600,5800,7800],
+  13:[1900,2500,2600,2700,6200,8300],14:[2000,2600,2700,2800,6500,8700],
+  15:[2100,2700,2800,2900,6900,9100],16:[2200,2800,2900,3000,7100,9500],
+  17:[2300,2900,3000,3100,7500,9800],18:[2400,3000,3100,3200,7900,10100],
+  19:[2500,3100,3300,3400,8300,10300],20:[2500,3200,3500,3600,8700,10500],
+  21:[2600,3300,3600,3700,9000,10700],22:[2600,3400,3700,3800,8100,10800],
+  23:[2700,3500,3800,3900,8400,11000],24:[2700,3600,3900,4200,8700,11200],
+  25:[2800,3700,4000,4500,9000,11400],26:[2800,3800,4100,4600,9200,11600],
+  27:[2900,3900,4200,4700,9400,11800],28:[2900,3900,4300,4800,9600,11900],
+  29:[3000,4000,4400,4900,9800,12000],30:[3000,4000,4500,5000,10000,12000],
+};
+
+let selectedCat = null;
+let customRate = null;
+let baseDays = 0, basePrice = 0, avgPerDay = 0, extraDayRate = 0;
+
+// Build category buttons
+const grid = document.getElementById('catGrid');
+CATEGORIES.forEach((cat, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'cat-btn';
+  btn.id = 'cat-' + i;
+  btn.innerHTML = `<span class="icon">${cat.icon}</span><span>${cat.label}</span>`;
+  btn.onclick = () => selectCat(i);
+  grid.appendChild(btn);
+});
+
+function selectCat(i) {
+  selectedCat = i;
+  document.querySelectorAll('.cat-btn').forEach((b, j) => {
+    b.classList.toggle('active', j === i);
+  });
+
+  const customBox = document.getElementById('customRateBox');
+  const isCustom = !!(CATEGORIES[i] && CATEGORIES[i].custom);
+  customBox.style.display = isCustom ? 'block' : 'none';
+
+  document.getElementById('result').style.display = 'none';
+  updateBtn();
+}
+
+document.getElementById('customRateInput').addEventListener('input', (e) => {
+  const v = parseFloat(e.target.value);
+  customRate = (!isNaN(v) && v > 0) ? v : null;
+  document.getElementById('result').style.display = 'none';
+  updateBtn();
+});
+
+function daysBetween(from, to) {
+  if (!from || !to) return 0;
+  const diff = (new Date(to) - new Date(from)) / 86400000;
+  return diff > 0 ? Math.round(diff) : 0;
+}
+
+// Breaks a date range into calendar months + leftover days.
+// Uses actual month length (28/29/30/31) rather than a flat 30-day month.
+function monthDayBreakdown(from, to) {
+  if (!from || !to) return null;
+  const start = new Date(from);
+  const end = new Date(to);
+  if (end <= start) return null;
+
+  let months = 0;
+  let cursor = new Date(start);
+  while (true) {
+    const next = new Date(cursor);
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    if (next <= end) {
+      cursor = next;
+      months++;
+    } else {
+      break;
+    }
+  }
+  const days = Math.round((end - cursor) / 86400000);
+  return { months, days };
+}
+
+function fmtDuration(from, to) {
+  const bd = monthDayBreakdown(from, to);
+  if (!bd) return '';
+  if (bd.months === 0) {
+    return bd.days + (bd.days === 1 ? ' day' : ' days');
+  }
+  const parts = [bd.months + (bd.months === 1 ? ' month' : ' months')];
+  if (bd.days > 0) parts.push(bd.days + (bd.days === 1 ? ' day' : ' days'));
+
+  const totalDays = daysBetween(from, to);
+  return parts.join(', ') + ` (${totalDays} days total)`;
+}
+
+function getPrice(months, leftoverDays, cat) {
+  const isCustomCat = CATEGORIES[cat] && CATEGORIES[cat].custom;
+  let monthlyRate;
+
+  if (isCustomCat) {
+    if (!customRate || customRate <= 0) return null;
+    monthlyRate = customRate;
+  } else {
+    monthlyRate = RATES[30][cat];
+  }
+
+  // Short stay (less than one full calendar month): use the day-by-day table,
+  // or prorate the custom rate.
+  if (months === 0) {
+    if (isCustomCat) return Math.round((monthlyRate / 30) * leftoverDays);
+    return RATES[leftoverDays][cat];
+  }
+
+  // One or more full calendar months (charged at the flat monthly rate,
+  // regardless of whether that month has 28, 29, 30, or 31 days),
+  // plus any leftover days at monthly ÷ 30 per day.
+  const dailyRate = monthlyRate / 30;
+  return Math.round(monthlyRate * months + leftoverDays * dailyRate);
+}
+
+function fmt(n) {
+  return '฿' + n.toLocaleString('en-US');
+}
+
+function fmtDate(str) {
+  if (!str) return '';
+  return new Date(str).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+function updateBtn() {
+  const from = document.getElementById('fromDate').value;
+  const to   = document.getElementById('toDate').value;
+  const days = daysBetween(from, to);
+
+  const pill = document.getElementById('durationPill');
+  if (days > 0) {
+    pill.style.display = 'flex';
+    document.getElementById('durationText').textContent = fmtDuration(from, to);
+  } else {
+    pill.style.display = 'none';
+  }
+
+  const isCustom = selectedCat !== null && CATEGORIES[selectedCat] && CATEGORIES[selectedCat].custom;
+  const customOk = !isCustom || (customRate && customRate > 0);
+
+  const ready = selectedCat !== null && from && to && days > 0 && customOk;
+  document.getElementById('calcBtn').disabled = !ready;
+  document.getElementById('result').style.display = 'none';
+}
+
+function calculate() {
+  const from = document.getElementById('fromDate').value;
+  const to   = document.getElementById('toDate').value;
+  const days = daysBetween(from, to);
+  const bd   = monthDayBreakdown(from, to);
+  if (!days || !bd || selectedCat === null) return;
+
+  const price = getPrice(bd.months, bd.days, selectedCat);
+  if (price === null) return;
+  const avg   = Math.round(price / days);
+
+  const isCustomCat = CATEGORIES[selectedCat] && CATEGORIES[selectedCat].custom;
+  const monthlyRate = isCustomCat ? customRate : RATES[30][selectedCat];
+
+  baseDays  = days;
+  basePrice = price;
+  avgPerDay = avg;
+  // For month-plus rentals, extra days are priced at monthly ÷ 30 (the fixed
+  // per-day rate), not the blended average, which gets diluted the longer the stay.
+  extraDayRate = bd.months >= 1 ? Math.round(monthlyRate / 30) : avg;
+
+  document.getElementById('resultPrice').textContent = fmt(price);
+  document.getElementById('rBike').textContent  = CATEGORIES[selectedCat].name;
+  document.getElementById('rFrom').textContent  = fmtDate(from);
+  document.getElementById('rTo').textContent    = fmtDate(to);
+  document.getElementById('rDays').textContent  = fmtDuration(from, to);
+  document.getElementById('rAvg').textContent   = fmt(avg) + '/day';
+  document.getElementById('extraNote').style.display = bd.months >= 1 ? 'block' : 'none';
+
+  document.getElementById('extraDaysInput').value = 0;
+  document.getElementById('extraResult').style.display = 'none';
+
+  const res = document.getElementById('result');
+  res.style.display = 'block';
+  res.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function calculateExtra() {
+  const input = document.getElementById('extraDaysInput');
+  let extra = parseInt(input.value, 10);
+  if (isNaN(extra) || extra < 0) extra = 0;
+  input.value = extra;
+
+  const extraCost = Math.round(extraDayRate * extra);
+  const rateLabel = extraDayRate === avgPerDay ? 'per-day avg' : 'monthly rate ÷ 30';
+
+  document.getElementById('extraResultPrice').textContent = fmt(extraCost);
+  document.getElementById('extraResultDetail').textContent =
+    extra > 0
+      ? `${extra} extra ${extra === 1 ? 'day' : 'days'} × ${fmt(extraDayRate)}/day (${rateLabel}) — not included in the total above`
+      : 'Enter a number of extra days above';
+
+  const box = document.getElementById('extraResult');
+  box.style.display = 'block';
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Reset the custom-rate sub-calculation whenever extra days is recalculated
+  document.getElementById('customDailyRateInput').value = '';
+  document.getElementById('customRateResult').style.display = 'none';
+}
+
+function calculateExtraCustom() {
+  const extra = parseInt(document.getElementById('extraDaysInput').value, 10) || 0;
+
+  const rateInput = document.getElementById('customDailyRateInput');
+  const rate = parseFloat(rateInput.value);
+  const box = document.getElementById('customRateResult');
+
+  if (isNaN(rate) || rate <= 0) {
+    box.style.display = 'none';
+    return;
+  }
+
+  const cost = Math.round(rate * extra);
+
+  document.getElementById('customRateResultPrice').textContent = fmt(cost);
+  document.getElementById('customRateResultDetail').textContent =
+    extra > 0
+      ? `${extra} extra ${extra === 1 ? 'day' : 'days'} × ${fmt(rate)}/day (custom rate)`
+      : 'Enter a number of extra days above, then a custom rate';
+
+  box.style.display = 'block';
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+document.getElementById('fromDate').addEventListener('change', updateBtn);
+document.getElementById('toDate').addEventListener('change', updateBtn);
+
+// Register service worker for offline use
+if ('serviceWorker' in navigator) {
+  const sw = `
+    self.addEventListener('install', e => {
+      e.waitUntil(caches.open('aa-scooter-v1').then(c => c.add('/')));
+    });
+    self.addEventListener('fetch', e => {
+      e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+    });
+  `;
+  const blob = new Blob([sw], { type: 'application/javascript' });
+  navigator.serviceWorker.register(URL.createObjectURL(blob));
+}
+</script>
+
+<script>
+/* ---- Date-in-words labels (shared across all pages) ----
+   Every <input type="date"> gets a small red label right after it that
+   writes the selected date out in words -- e.g. "8 July 2026" -- so a
+   date like 08/07 can never be misread as August 7 (American style).
+   You still pick the date in the box exactly as before; this only
+   changes what's DISPLAYED, never what's saved to the sheet.
+   Handles date boxes created later (e.g. the Return picker on Bikes
+   Status) via a DOM observer, and values set by code (prefills,
+   defaults) via a light polling loop. */
+(function () {
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function dateWords(iso) {
+    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(iso || '');
+    if (!m) return '';
+    var monthIdx = parseInt(m[2], 10) - 1;
+    if (monthIdx < 0 || monthIdx > 11) return '';
+    return parseInt(m[3], 10) + ' ' + MONTHS[monthIdx] + ' ' + parseInt(m[1], 10);
+  }
+
+  function ensureLabel(inp) {
+    var el = inp.__dateWordsEl;
+    if (el && el.parentNode) return el;
+    el = document.createElement('span');
+    el.className = 'date-words-label';
+    el.style.cssText = 'display:inline-block;font-size:12.5px;font-weight:700;' +
+      'color:#C62828;margin-top:3px;margin-left:2px;line-height:1.25;white-space:nowrap;';
+    if (inp.nextSibling) {
+      inp.parentNode.insertBefore(el, inp.nextSibling);
+    } else {
+      inp.parentNode.appendChild(el);
+    }
+    inp.__dateWordsEl = el;
+    return el;
+  }
+
+  function refreshDateWordLabels() {
+    var inputs = document.querySelectorAll('input[type="date"]');
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      if (!inp.parentNode) continue;
+      var el = ensureLabel(inp);
+      var text = dateWords(inp.value);
+      if (el.textContent !== text) el.textContent = text;
+    }
+  }
+
+  // React immediately when the user picks/types a date.
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+
+  // Catch date boxes that get created after page load (re-rendered lists,
+  // pop-up pickers). refreshDateWordLabels is idempotent, so the observer
+  // re-firing on its own label insertions settles immediately.
+  if (window.MutationObserver) {
+    new MutationObserver(refreshDateWordLabels)
+      .observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  // Catch values set by code (defaults, prefills from other pages), which
+  // fire no events. A few date boxes at 2 checks/second costs nothing.
+  setInterval(refreshDateWordLabels, 500);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshDateWordLabels);
+  } else {
+    refreshDateWordLabels();
+  }
+})();
+</script>
+
+</body>
+</html>

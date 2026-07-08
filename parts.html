@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parts &amp; Oil — Bike Record</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sand:#F5EFE6;
+    --ink:#1A2421;
+    --petrol:#0F3D3E;
+    --petrol-light:#175A5B;
+    --cone:#FF6B35;
+    --card:#FFFFFF;
+    --line:#DED4C2;
+    --ok:#2F855A;
+    --err:#C53030;
+    --muted:#5A6663;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--sand);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  .topbar{
+    background:var(--petrol);
+    padding:14px 16px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .topbar .brand{ display:flex; align-items:center; gap:8px; text-decoration:none; }
+  .topbar .brand img{ width:28px; height:28px; object-fit:contain; }
+  .topbar .brand span{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
+    color:#fff; letter-spacing:.02em;
+  }
+  .topbar nav{ display:flex; gap:16px; flex-wrap:wrap; }
+  .topbar nav a{
+    color:#CFE3E0; text-decoration:none; font-size:12.5px; font-weight:500;
+    padding:3px 0; border-bottom:2px solid transparent;
+  }
+  .topbar nav a:hover{ color:#fff; }
+  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
+  .page-head{
+    max-width:520px; margin:0 auto; padding:22px 16px 4px;
+  }
+  .page-head h1{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
+    color:var(--petrol); margin:0;
+  }
+  .page-head .sub{ color:var(--muted); font-size:13px; margin-top:6px; }
+  main{ max-width:520px; margin:0 auto; padding:20px 16px 60px; }
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:14px;
+    padding:20px; margin-bottom:16px;
+  }
+  .card h2{
+    font-family:'Barlow Condensed',sans-serif; font-size:15px; font-weight:600;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--petrol);
+    margin:0 0 14px; display:flex; align-items:center; gap:8px;
+  }
+  .card h2::before{
+    content:""; width:7px; height:7px; border-radius:50%;
+    background:var(--cone); display:inline-block;
+  }
+  label{ display:block; font-size:12.5px; font-weight:500; color:#5A6663; margin:14px 0 5px; }
+  label:first-of-type{ margin-top:0; }
+  input, select, textarea{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
+    font-size:15px; font-family:'Inter',sans-serif; background:#FBFAF7; color:var(--ink);
+    transition:border-color .15s;
+  }
+  textarea{ min-height:110px; resize:vertical; line-height:1.5; }
+  input:focus, select:focus, textarea:focus{ outline:none; border-color:var(--petrol-light); background:#fff; }
+  button{
+    width:100%; padding:15px; border:none; border-radius:10px; background:var(--cone);
+    color:#fff; font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:17px;
+    letter-spacing:.04em; text-transform:uppercase; cursor:pointer; margin-top:20px;
+    transition:transform .1s, background .15s;
+  }
+  button:active{ transform:scale(.98); }
+  button:disabled{ background:#C9B9A8; cursor:not-allowed; }
+  .status{
+    margin-top:12px; font-size:13.5px; padding:10px 12px; border-radius:8px; display:none;
+  }
+  .status.ok{ display:block; background:#E8F5EE; color:var(--ok); border:1px solid #BEE3CE; }
+  .status.err{ display:block; background:#FCEBEB; color:var(--err); border:1px solid #F3C6C6; }
+  .field{ position:relative; }
+  .ac-list{
+    position:absolute; left:0; right:0; top:100%;
+    background:#fff; border:1px solid var(--line); border-top:none;
+    border-radius:0 0 9px 9px; max-height:260px; overflow-y:auto;
+    z-index:20; display:none; box-shadow:0 8px 18px rgba(15,61,62,.1);
+  }
+  .ac-list.show{ display:block; }
+  .ac-item{ padding:10px 12px; font-size:14px; cursor:pointer; border-bottom:1px solid #F0EBE0; }
+  .ac-item:last-child{ border-bottom:none; }
+  .ac-item:hover, .ac-item.hi{ background:#F5EFE6; }
+  .ac-item mark{ background:#FFE3D2; color:var(--ink); border-radius:2px; }
+  .load-status{
+    font-size:12px; color:#B36A2E; background:#FFF3E6; border:1px solid #F3D9B8;
+    border-radius:7px; padding:7px 10px; margin:-4px 0 12px; display:none;
+  }
+  .load-status.show{ display:block; }
+  .selected-bike{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--petrol); color:#fff; border-radius:12px; padding:14px 16px;
+    margin-bottom:16px;
+  }
+  .selected-bike .name{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:18px;
+  }
+  .selected-bike button.change-btn{
+    width:auto; margin:0; padding:8px 12px; background:rgba(255,255,255,.15);
+    font-size:12px; letter-spacing:.04em;
+  }
+  .hidden{ display:none; }
+  .empty-hint{ font-size:13px; color:#8A948F; padding:14px 2px; text-align:center; }
+  .save-bar{
+    position:sticky; bottom:0; margin-top:4px;
+  }
+
+  .show-more-btn{
+    background:#fff; color:var(--petrol); border:1px solid var(--line);
+    font-size:14.5px; letter-spacing:.06em; padding:13px;
+    margin:0 0 16px;
+  }
+  .show-more-btn:active{ transform:scale(.99); }
+
+  .field-with-action{ display:flex; align-items:center; gap:8px; }
+  .field-with-action input{ flex:1; }
+  .camera-btn{
+    flex-shrink:0; width:44px; height:44px; border-radius:9px;
+    border:1px solid var(--line); background:#FBFAF7; cursor:pointer;
+    font-size:19px; display:flex; align-items:center; justify-content:center;
+    padding:0; margin-top:0;
+  }
+  .camera-btn:active{ transform:scale(.96); }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(15,36,33,.55); z-index:1000;
+    display:none; align-items:flex-end; justify-content:center;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal-card{
+    background:var(--card); width:100%; max-width:520px; border-radius:18px 18px 0 0;
+    padding:20px; max-height:92vh; overflow-y:auto;
+  }
+  @media (min-width:560px){
+    .modal-overlay{ align-items:center; }
+    .modal-card{ border-radius:18px; }
+  }
+  .modal-card h3{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:19px;
+    color:var(--petrol); margin:0 0 12px;
+  }
+  .modal-preview{
+    width:100%; max-height:240px; object-fit:contain; border-radius:10px;
+    border:1px solid var(--line); background:#000; margin-bottom:14px; display:block;
+  }
+  .ocr-status{
+    font-size:12.5px; color:var(--muted); margin:-6px 0 14px; display:flex; align-items:center; gap:6px;
+  }
+  .spinner{
+    width:13px; height:13px; border:2px solid var(--line); border-top-color:var(--cone);
+    border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .modal-actions{ display:flex; gap:10px; margin-top:18px; }
+  .modal-actions button{ margin-top:0; }
+  .modal-actions .cancel-btn{ background:#EFEAE0; color:var(--ink); }
+
+  .crop-hint{ font-size:12px; color:var(--muted); margin:-6px 0 12px; line-height:1.4; }
+  .crop-stage{
+    position:relative; width:100%; height:340px; background:#000;
+    border-radius:10px; border:1px solid var(--line); overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .crop-stage img{
+    max-width:100%; max-height:100%; display:block;
+    pointer-events:none; user-select:none; -webkit-user-drag:none;
+  }
+  .crop-box{
+    position:absolute; border:2px solid var(--cone);
+    box-shadow:0 0 0 2000px rgba(0,0,0,.5);
+    touch-action:none; cursor:move;
+  }
+  .crop-handle{
+    position:absolute; right:-12px; bottom:-12px; width:24px; height:24px;
+    border-radius:50%; background:var(--cone); border:2px solid #fff;
+    touch-action:none; box-shadow:0 1px 4px rgba(0,0,0,.3);
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="index.html">
+    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
+    <span>AA Scooter Rental</span>
+  </a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="customers.html">Customer Record</a>
+    <a href="pricing.html">Price Calculator</a>
+    <a href="parts.html" class="active">Parts &amp; Oil</a>
+    <a href="oilchange.html">Oil Change</a>
+    <a href="bikes.html">Bikes Status</a>
+    <a href="bikephotos.html">Bike Photos</a>
+    <a href="available-bikes.html">Available Bikes</a>
+    <a href="accounts.html">Accounts</a>
+  </nav>
+</div>
+
+<div class="page-head">
+  <h1>Parts &amp; Oil</h1>
+  <div class="sub">Search a bike, then edit its record straight from the "Parts and Oil change" tab</div>
+</div>
+
+<main>
+
+  <div id="searchCard" class="card">
+    <h2>Find a bike</h2>
+    <div class="load-status" id="loadStatus">Loading bikes…</div>
+    <label for="bikeSearch">Bike</label>
+    <div class="field">
+      <input id="bikeSearch" autocomplete="off" placeholder="Start typing a bike name…">
+      <div class="ac-list" id="acList"></div>
+    </div>
+  </div>
+
+  <div id="editSection" class="hidden">
+    <div class="selected-bike">
+      <div class="name" id="selectedBikeName"></div>
+      <button type="button" class="change-btn" id="changeBikeBtn">Change bike</button>
+    </div>
+
+    <div class="card" id="kmCard">
+      <h2>Kilometers check</h2>
+      <div id="kmFieldsBox"></div>
+      <button type="button" id="kmSaveBtn">Update kilometers</button>
+      <div class="status" id="kmStatusBox"></div>
+    </div>
+
+    <button type="button" class="show-more-btn" id="showMoreBtn">Show more ▾</button>
+
+    <div id="moreSection" class="hidden">
+      <div class="card">
+        <h2>Record</h2>
+        <div id="fieldsBox"></div>
+        <div class="save-bar">
+          <button type="button" id="saveBtn">Save changes</button>
+          <div class="status" id="statusBox"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="libraryInput" accept="image/*" style="display:none">
+
+<div class="modal-overlay" id="sourceModal">
+  <div class="modal-card">
+    <h3>Speedometer reading</h3>
+    <div class="modal-actions" style="flex-direction:column;">
+      <button type="button" id="chooseCameraBtn">📷 Take a photo</button>
+      <button type="button" id="chooseLibraryBtn">🖼️ Upload a photo</button>
+      <button type="button" class="cancel-btn" id="chooseCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="cropModal">
+  <div class="modal-card">
+    <h3>Crop to the number</h3>
+    <div class="crop-hint">Drag the box over just the odometer digits, then confirm. Tight, straight-on, glare-free crops read best — drag the orange corner to resize.</div>
+    <div class="crop-stage" id="cropStage">
+      <img id="cropImage" alt="Photo to crop">
+      <div class="crop-box" id="cropBox">
+        <div class="crop-handle" id="cropHandle"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="cancel-btn" id="cropSkipBtn">Use full photo</button>
+      <button type="button" id="cropConfirmBtn">Use this crop</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="odoModal">
+  <div class="modal-card">
+    <h3>Speedometer reading</h3>
+    <img id="odoPreview" class="modal-preview" alt="Speedometer photo">
+    <div class="ocr-status" id="ocrStatus"><div class="spinner"></div> Reading number from photo…</div>
+    <label for="odoKmInput">Last kilometers check</label>
+    <input id="odoKmInput" inputmode="numeric" placeholder="e.g. 24350">
+    <label for="odoDateInput">Date checked</label>
+    <input type="date" id="odoDateInput">
+    <div class="modal-actions">
+      <button type="button" class="cancel-btn" id="odoCancelBtn">Cancel</button>
+      <button type="button" id="odoConfirmBtn">Confirm &amp; save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="kmWarningModal">
+  <div class="modal-card">
+    <h3>Double-check this reading</h3>
+    <div id="kmWarningMsg" style="font-size:14px; color:var(--ink); line-height:1.6; margin-bottom:4px;"></div>
+    <div class="modal-actions">
+      <button type="button" class="cancel-btn" id="kmWarningCancelBtn">Cancel</button>
+      <button type="button" id="kmWarningConfirmBtn">Yes, this is correct</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Same Apps Script web app as the Customer Record page — it now also
+// serves/updates the "Parts and Oil change" tab via the `action` field.
+const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
+
+let partsData = null;     // { headers: [...], rows: [...] }
+let keyHeader = null;     // the header used as the unique bike identifier (first column)
+let rowsPromise = null;
+let currentRow = null;    // the row object currently loaded into the edit form
+let kmHeaderName = null;  // actual sheet header for the km-reading field, for the current bike
+let dateHeaderName = null;// actual sheet header for the plain "Date" field, for the current bike
+
+function setLoadStatus(msg) {
+  const el = document.getElementById('loadStatus');
+  if (!msg) { el.classList.remove('show'); return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function loadParts() {
+  if (rowsPromise) return rowsPromise;
+  setLoadStatus('Loading bikes…');
+  rowsPromise = fetch(scriptUrl + '?action=parts')
+    .then(res => res.json())
+    .then(data => {
+      if (!data.success) throw new Error(data.error || 'Could not load data');
+      partsData = data;
+      keyHeader = data.headers[0];
+      setLoadStatus(null);
+      return partsData;
+    })
+    .catch(err => {
+      setLoadStatus('Could not load bikes: ' + err.message + ' — tap the field again to retry.');
+      rowsPromise = null;
+      return null;
+    });
+  return rowsPromise;
+}
+
+loadParts();
+
+// If we arrived from the Oil Change list with ?bike=NAME, jump straight
+// into that bike's edit form once the data is ready.
+const urlBike = new URLSearchParams(window.location.search).get('bike');
+if (urlBike) {
+  loadParts().then(() => {
+    if (partsData) selectBike(urlBike);
+  });
+}
+
+// ---------------- Autocomplete on bike name ----------------
+
+function tokenMatch(value, query) {
+  if (!query) return true;
+  const v = (value || '').toString().toLowerCase();
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return tokens.every(t => v.includes(t));
+}
+
+function highlight(value, query) {
+  let out = String(value || '');
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  tokens.forEach(t => {
+    if (!t) return;
+    const re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
+    out = out.replace(re, '<mark>$1</mark>');
+  });
+  return out;
+}
+
+const bikeInput = document.getElementById('bikeSearch');
+const acList = document.getElementById('acList');
+let hiIndex = -1;
+
+function closeList() {
+  acList.classList.remove('show');
+  acList.innerHTML = '';
+  hiIndex = -1;
+}
+
+function openList(query) {
+  if (!partsData) return;
+  const options = partsData.rows
+    .map(r => r[keyHeader])
+    .filter(v => tokenMatch(v, query))
+    .slice(0, 10);
+  if (options.length === 0) { closeList(); return; }
+  acList.innerHTML = options.map((v, i) =>
+    `<div class="ac-item" data-index="${i}">${highlight(v, query)}</div>`
+  ).join('');
+  acList.classList.add('show');
+  hiIndex = -1;
+  Array.from(acList.children).forEach((el, i) => {
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      selectBike(options[i]);
+    });
+  });
+  acList._options = options;
+}
+
+bikeInput.addEventListener('input', () => {
+  loadParts().then(() => openList(bikeInput.value.trim()));
+});
+bikeInput.addEventListener('focus', () => {
+  if (partsData) openList(bikeInput.value.trim());
+});
+bikeInput.addEventListener('keydown', (e) => {
+  const items = Array.from(acList.children);
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    hiIndex = Math.min(hiIndex + 1, items.length - 1);
+    items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    hiIndex = Math.max(hiIndex - 1, 0);
+    items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+  } else if (e.key === 'Enter' && hiIndex >= 0) {
+    e.preventDefault();
+    selectBike(acList._options[hiIndex]);
+  } else if (e.key === 'Escape') {
+    closeList();
+  }
+});
+document.addEventListener('click', (e) => {
+  if (!bikeInput.contains(e.target) && !acList.contains(e.target)) closeList();
+});
+
+// ---------------- Selecting a bike / rendering the edit form ----------------
+
+function fieldIdFor(header, i) {
+  return 'f_' + i + '_' + header.replace(/[^a-z0-9]/gi, '_');
+}
+
+// The sheet stores dates as dd/mm/yyyy text. Native <input type="date">
+// needs yyyy-mm-dd, so convert both ways for the "date" column.
+function ddmmyyyyToInputValue(str) {
+  if (!str) return '';
+  const parts = str.toString().trim().split('/');
+  if (parts.length !== 3) return '';
+  let [d, m, y] = parts;
+  d = d.padStart(2, '0');
+  m = m.padStart(2, '0');
+  if (y.length === 2) y = '20' + y;
+  if (!/^\d{4}$/.test(y) || !/^\d{2}$/.test(m) || !/^\d{2}$/.test(d)) return '';
+  return y + '-' + m + '-' + d;
+}
+function inputValueToDdMmYyyy(val) {
+  if (!val) return '';
+  const parts = val.split('-'); // yyyy-mm-dd
+  if (parts.length !== 3) return '';
+  return parts[2] + '/' + parts[1] + '/' + parts[0];
+}
+
+// Converts the sheet's "dd/mm/yyyy" text into the yyyy-mm-dd format
+// <input type="date"> requires. Returns '' if it can't be parsed
+// (the picker just opens empty rather than losing the original text).
+function ddmmyyyyToInputValue(str) {
+  if (!str) return '';
+  const parts = str.trim().split('/');
+  if (parts.length !== 3) return '';
+  let [d, m, y] = parts;
+  d = d.padStart(2, '0');
+  m = m.padStart(2, '0');
+  if (y.length === 2) y = '20' + y;
+  if (!/^\d{2}$/.test(d) || !/^\d{2}$/.test(m) || !/^\d{4}$/.test(y)) return '';
+  return `${y}-${m}-${d}`;
+}
+
+// Converts back from yyyy-mm-dd (what the date input gives us) to the
+// sheet's usual dd/mm/yyyy text.
+function inputValueToDdMmYyyy(val) {
+  if (!val) return '';
+  const parts = val.split('-');
+  if (parts.length !== 3) return '';
+  const [y, m, d] = parts;
+  return `${d}/${m}/${y}`;
+}
+
+// Everything after the "horn switch" column gets collapsed into a single
+// "Notes" box instead of one field per column. Returns the header-array
+// index of "horn switch" itself, or -1 if that column isn't present.
+function findNotesGroupStart(headers) {
+  return headers.findIndex(h => h.trim().toLowerCase() === 'horn switch');
+}
+
+// Matches whichever name the "km reading" column currently has in the
+// sheet — old name or the renamed one — so this keeps working whether or
+// not the header cell has been renamed yet.
+function normalizeHeaderText(h) {
+  return (h || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+}
+const KM_CHECK_HEADER_NAMES = ['last kilometers check', 'last km check', 'last oil check'];
+function findKmCheckHeader(headers) {
+  for (const name of KM_CHECK_HEADER_NAMES) {
+    const match = headers.find(h => normalizeHeaderText(h) === name);
+    if (match) return match;
+  }
+  return null;
+}
+function findExactDateHeader(headers) {
+  return headers.find(h => normalizeHeaderText(h) === 'date') || null;
+}
+
+function selectBike(bikeName) {
+  const row = partsData.rows.find(r => r[keyHeader] === bikeName);
+  if (!row) return;
+  currentRow = row;
+  closeList();
+  bikeInput.value = '';
+
+  document.getElementById('selectedBikeName').textContent = bikeName;
+  document.getElementById('searchCard').classList.add('hidden');
+  document.getElementById('editSection').classList.remove('hidden');
+
+  const box = document.getElementById('fieldsBox');
+  box.innerHTML = '';
+  const kmBox = document.getElementById('kmFieldsBox');
+  kmBox.innerHTML = '';
+
+  const headers = partsData.headers;
+  const notesStart = findNotesGroupStart(headers); // index of "horn switch", or -1
+  // Fields up through and including "horn switch" render individually;
+  // anything after that is folded into one combined Notes box.
+  const individualEnd = notesStart === -1 ? headers.length : notesStart + 1;
+
+  const kmHeaderActual = findKmCheckHeader(headers);
+  const dateHeaderActual = findExactDateHeader(headers);
+  kmHeaderName = kmHeaderActual;
+  dateHeaderName = dateHeaderActual;
+
+  headers.forEach((header, i) => {
+    if (i === 0) return; // skip the bike-name column itself — that's the key, shown above
+    if (i >= individualEnd) return; // handled by the Notes box below
+    const value = row[header] || '';
+    const id = fieldIdFor(header, i);
+    // The km reading and its check date get their own quick-update card at
+    // the top — that's the pair updated most often, day to day.
+    const isQuickField = (header === kmHeaderActual) || (header === dateHeaderActual);
+    const wrap = document.createElement('div');
+
+    const label = document.createElement('label');
+    label.setAttribute('for', id);
+    // The sheet column itself can stay named "Last oil check" — the GUI
+    // always shows the clearer "Last kilometers check" for this field.
+    if (header === kmHeaderActual) label.textContent = 'Last kilometers check';
+    else if (header === dateHeaderActual) label.textContent = 'Date checked';
+    else label.textContent = header;
+    wrap.appendChild(label);
+
+    if (header.trim().toLowerCase() === 'status') {
+      const select = document.createElement('select');
+      select.id = id;
+      select.dataset.header = header;
+      ['', 'OK', 'MONITOR', 'HIGH RISK'].forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt;
+        o.textContent = opt || '—';
+        if (opt === value) o.selected = true;
+        select.appendChild(o);
+      });
+      wrap.appendChild(select);
+    } else if (['date', 'oil change'].includes(header.trim().toLowerCase())) {
+      const input = document.createElement('input');
+      input.type = 'date';
+      input.id = id;
+      input.dataset.header = header;
+      input.dataset.isDate = 'true';
+      input.value = ddmmyyyyToInputValue(value);
+      wrap.appendChild(input);
+    } else {
+      const input = document.createElement('input');
+      input.id = id;
+      input.dataset.header = header;
+      input.value = value;
+      input.autocomplete = 'off';
+
+      if (header === kmHeaderActual) {
+        const fieldRow = document.createElement('div');
+        fieldRow.className = 'field-with-action';
+        fieldRow.appendChild(input);
+
+        const camBtn = document.createElement('button');
+        camBtn.type = 'button';
+        camBtn.className = 'camera-btn';
+        camBtn.title = 'Take a photo of the speedometer';
+        camBtn.textContent = '📷';
+        camBtn.addEventListener('click', () => openCameraFor(id));
+        fieldRow.appendChild(camBtn);
+
+        wrap.appendChild(fieldRow);
+      } else {
+        wrap.appendChild(input);
+      }
+    }
+
+    (isQuickField ? kmBox : box).appendChild(wrap);
+  });
+
+  // If the sheet is missing the km/date columns, fall back to the full form.
+  const kmCard = document.getElementById('kmCard');
+  const showMoreBtn = document.getElementById('showMoreBtn');
+  const moreSection = document.getElementById('moreSection');
+  if (kmBox.children.length) {
+    kmCard.classList.remove('hidden');
+    showMoreBtn.classList.remove('hidden');
+    moreSection.classList.add('hidden'); // collapsed by default on every load
+    showMoreBtn.textContent = 'Show more ▾';
+  } else {
+    kmCard.classList.add('hidden');
+    showMoreBtn.classList.add('hidden');
+    moreSection.classList.remove('hidden');
+  }
+
+  // Combined Notes box for every column after "horn switch"
+  if (notesStart !== -1 && individualEnd < headers.length) {
+    const extraHeaders = headers.slice(individualEnd);
+    const combinedValue = extraHeaders
+      .map(h => (row[h] || '').toString().trim())
+      .filter(v => v)
+      .join('\n');
+
+    const wrap = document.createElement('div');
+    const label = document.createElement('label');
+    label.setAttribute('for', 'notesField');
+    label.textContent = 'Notes';
+    wrap.appendChild(label);
+
+    const textarea = document.createElement('textarea');
+    textarea.id = 'notesField';
+    textarea.value = combinedValue;
+    textarea.dataset.extraHeaders = JSON.stringify(extraHeaders);
+    wrap.appendChild(textarea);
+
+    box.appendChild(wrap);
+  }
+
+  document.getElementById('statusBox').className = 'status';
+  document.getElementById('kmStatusBox').className = 'status';
+}
+
+document.getElementById('showMoreBtn').addEventListener('click', () => {
+  const more = document.getElementById('moreSection');
+  const nowHidden = more.classList.toggle('hidden');
+  document.getElementById('showMoreBtn').textContent = nowHidden ? 'Show more ▾' : 'Show less ▴';
+});
+
+document.getElementById('changeBikeBtn').addEventListener('click', () => {
+  document.getElementById('editSection').classList.add('hidden');
+  document.getElementById('searchCard').classList.remove('hidden');
+  currentRow = null;
+});
+
+// ---------------- Saving ----------------
+
+// Reads every [data-header] input inside the given box into `fields`
+// (converting date inputs back to the sheet's dd/mm/yyyy text).
+function collectFieldsIn(boxId, fields) {
+  document.querySelectorAll('#' + boxId + ' [data-header]').forEach(el => {
+    fields[el.dataset.header] = el.dataset.isDate === 'true'
+      ? inputValueToDdMmYyyy(el.value)
+      : el.value;
+  });
+  return fields;
+}
+
+// ---- Kilometers safety check ----
+// Guards against typos/OCR misreads: if a new "Last kilometers check"
+// value is LESS than the bike's current reading, or 100+ km MORE than it,
+// this flashes a confirmation modal showing the bike, the previous
+// reading, the new one, and the difference, before anything is saved.
+// Returns a Promise resolving true (go ahead and save) or false (user
+// cancelled -- nothing gets saved). Doesn't close on a backdrop click,
+// only the two buttons -- same as this file's other modals (sourceModal/
+// cropModal/odoModal), and appropriate here since this is a deliberate
+// confirm-or-cancel gate rather than an easily-dismissed popup.
+let kmWarningResolve = null;
+function showKmWarning(bikeName, oldKm, newKm) {
+  return new Promise((resolve) => {
+    kmWarningResolve = resolve;
+    const diff = newKm - oldKm;
+    const direction = diff < 0 ? 'less' : 'more';
+    document.getElementById('kmWarningMsg').innerHTML =
+      '<b>' + bikeName + '</b> was last checked at <b>' + oldKm.toLocaleString() + ' km</b>. ' +
+      "You're entering <b>" + newKm.toLocaleString() + ' km</b>, which is <b>' +
+      Math.abs(diff).toLocaleString() + ' km ' + direction + '</b> than the last reading. Are you sure this is correct?';
+    document.getElementById('kmWarningModal').classList.add('show');
+  });
+}
+function resolveKmWarning(result) {
+  document.getElementById('kmWarningModal').classList.remove('show');
+  if (kmWarningResolve) kmWarningResolve(result);
+  kmWarningResolve = null;
+}
+document.getElementById('kmWarningCancelBtn').addEventListener('click', () => resolveKmWarning(false));
+document.getElementById('kmWarningConfirmBtn').addEventListener('click', () => resolveKmWarning(true));
+
+// Checks the km field (if present in this particular save) against
+// currentRow's existing value. Returns true if it's fine to proceed
+// (no previous value to compare against, or the change is within a
+// normal range), or the user's choice after being shown the warning.
+async function confirmKmChangeIfNeeded(fields) {
+  if (!kmHeaderName || !Object.prototype.hasOwnProperty.call(fields, kmHeaderName)) return true;
+
+  const oldKmRaw = currentRow[kmHeaderName];
+  const newKmRaw = fields[kmHeaderName];
+  const oldKm = Number(oldKmRaw);
+  const newKm = Number(newKmRaw);
+  const oldValid = oldKmRaw !== '' && oldKmRaw !== undefined && oldKmRaw !== null && !isNaN(oldKm);
+  const newValid = newKmRaw !== '' && newKmRaw !== undefined && newKmRaw !== null && !isNaN(newKm);
+  if (!oldValid || !newValid) return true; // nothing to compare against yet
+
+  const diff = newKm - oldKm;
+  if (diff >= 0 && diff < 100) return true; // normal, expected increase
+
+  const bikeName = currentRow[keyHeader] || 'This bike';
+  return showKmWarning(bikeName, oldKm, newKm);
+}
+
+// Shared POST-and-report routine used by both the quick "Update kilometers"
+// button and the full "Save changes" button — only the set of fields sent
+// and the button/status elements differ.
+async function saveFields(fields, btn, statusBox, idleLabel) {
+  if (!currentRow) return;
+
+  const okToProceed = await confirmKmChangeIfNeeded(fields);
+  if (!okToProceed) return; // user cancelled -- nothing saved
+
+  statusBox.className = 'status';
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const payload = {
+    action: 'updateBike',
+    bike: currentRow[keyHeader],
+    fields: fields
+  };
+
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (data.warning) {
+        // Post-write verification problems (the server re-reads what it
+        // wrote and compares) -- the save DID go through, but something
+        // should be checked by hand.
+        statusBox.textContent = 'Saved — "' + payload.bike + '" updated, but: ' + data.warning;
+        statusBox.className = 'status err';
+      } else {
+        statusBox.textContent = 'Saved — "' + payload.bike + '" updated.';
+        statusBox.className = 'status ok';
+      }
+      // Update local cache so re-selecting shows the fresh values without a refetch
+      Object.assign(currentRow, fields);
+    } else {
+      throw new Error(data.error || 'Unknown error');
+    }
+  } catch (err) {
+    statusBox.textContent = 'Could not save: ' + err.message;
+    statusBox.className = 'status err';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = idleLabel;
+  }
+}
+
+// Quick save: writes only the km reading + date checked from the top card.
+async function performQuickSave() {
+  const fields = collectFieldsIn('kmFieldsBox', {});
+  await saveFields(
+    fields,
+    document.getElementById('kmSaveBtn'),
+    document.getElementById('kmStatusBox'),
+    'Update kilometers'
+  );
+}
+
+// Full save: everything — the top card's km/date plus the whole record.
+async function performSave() {
+  const fields = collectFieldsIn('kmFieldsBox', {});
+  collectFieldsIn('fieldsBox', fields);
+
+  // The Notes box represents several trailing columns folded into one.
+  // Write its text into the first of those columns and clear the rest,
+  // so the data actually lives in a single place going forward.
+  const notesTextarea = document.getElementById('notesField');
+  if (notesTextarea) {
+    const extraHeaders = JSON.parse(notesTextarea.dataset.extraHeaders);
+    extraHeaders.forEach((h, i) => {
+      fields[h] = i === 0 ? notesTextarea.value : '';
+    });
+  }
+
+  await saveFields(
+    fields,
+    document.getElementById('saveBtn'),
+    document.getElementById('statusBox'),
+    'Save changes'
+  );
+}
+
+document.getElementById('saveBtn').addEventListener('click', performSave);
+document.getElementById('kmSaveBtn').addEventListener('click', performQuickSave);
+
+// ---------------- Camera capture + auto-read for speedometer photos ----------------
+// This runs an OCR pass entirely in the browser (no server or API key
+// involved) restricted to digits. It's best-effort: whatever it reads is
+// shown as an editable starting point, never applied silently, since
+// speedometer photos (glare, angle, digit vs. needle dials) aren't always
+// clean reads.
+
+let ocrTargetKmFieldId = null;
+let tesseractLoadPromise = null;
+
+function loadTesseract() {
+  if (window.Tesseract) return Promise.resolve();
+  if (tesseractLoadPromise) return tesseractLoadPromise;
+  tesseractLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('reader library failed to load'));
+    document.head.appendChild(script);
+  });
+  return tesseractLoadPromise;
+}
+
+function openCameraFor(kmFieldId) {
+  ocrTargetKmFieldId = kmFieldId;
+  document.getElementById('sourceModal').classList.add('show');
+}
+
+document.getElementById('chooseCameraBtn').addEventListener('click', () => {
+  document.getElementById('sourceModal').classList.remove('show');
+  const input = document.getElementById('cameraInput');
+  input.value = '';
+  input.click();
+});
+document.getElementById('chooseLibraryBtn').addEventListener('click', () => {
+  document.getElementById('sourceModal').classList.remove('show');
+  const input = document.getElementById('libraryInput');
+  input.value = '';
+  input.click();
+});
+document.getElementById('chooseCancelBtn').addEventListener('click', () => {
+  document.getElementById('sourceModal').classList.remove('show');
+  ocrTargetKmFieldId = null;
+});
+
+function todayInputValue() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+// ---- Step 1: pick a photo, then hand it to the crop modal ----
+function handleSelectedFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => openCropModal(reader.result);
+  reader.readAsDataURL(file);
+}
+
+document.getElementById('cameraInput').addEventListener('change', (e) => {
+  handleSelectedFile(e.target.files && e.target.files[0]);
+});
+document.getElementById('libraryInput').addEventListener('change', (e) => {
+  handleSelectedFile(e.target.files && e.target.files[0]);
+});
+
+// ---- Step 2: crop modal — a draggable, resizable box over the photo ----
+const cropStage = document.getElementById('cropStage');
+const cropImage = document.getElementById('cropImage');
+const cropBox = document.getElementById('cropBox');
+const cropHandle = document.getElementById('cropHandle');
+
+function placeDefaultCropBox() {
+  // Default box: centered, roomy strip — odometer digits are usually
+  // wider than tall. offsetLeft/Top/Width/Height on the <img> are
+  // relative to .crop-stage (its nearest positioned ancestor), so this
+  // works regardless of letterboxing from the image's own aspect ratio.
+  // IMPORTANT: this only measures correctly once the modal is actually
+  // visible — a hidden (display:none) element always measures 0×0, which
+  // previously produced a zero-size, unusable crop box.
+  const iw = cropImage.offsetWidth, ih = cropImage.offsetHeight;
+  const ix = cropImage.offsetLeft, iy = cropImage.offsetTop;
+  const bw = Math.max(30, Math.round(iw * 0.7));
+  const bh = Math.max(20, Math.round(ih * 0.22));
+  setCropBoxRect(ix + Math.round((iw - bw) / 2), iy + Math.round((ih - bh) / 2), bw, bh);
+}
+
+function openCropModal(dataUrl) {
+  // Show the modal first so the image has real, non-zero layout
+  // dimensions by the time we measure it.
+  document.getElementById('cropModal').classList.add('show');
+
+  const finish = () => {
+    // rAF gives the browser one paint tick to lay the now-visible modal
+    // out before we read offsetWidth/offsetHeight from it.
+    requestAnimationFrame(placeDefaultCropBox);
+  };
+
+  if (cropImage.src === dataUrl && cropImage.complete && cropImage.naturalWidth) {
+    // Same image already loaded (rare, but onload won't refire) — place directly.
+    finish();
+  } else {
+    cropImage.onload = finish;
+    cropImage.src = dataUrl;
+  }
+}
+
+function getImageDisplayRect() {
+  return {
+    left: cropImage.offsetLeft, top: cropImage.offsetTop,
+    width: cropImage.offsetWidth, height: cropImage.offsetHeight
+  };
+}
+
+function setCropBoxRect(left, top, width, height) {
+  cropBox.style.left = left + 'px';
+  cropBox.style.top = top + 'px';
+  cropBox.style.width = width + 'px';
+  cropBox.style.height = height + 'px';
+}
+
+function getCropBoxRect() {
+  return {
+    left: parseFloat(cropBox.style.left) || 0,
+    top: parseFloat(cropBox.style.top) || 0,
+    width: parseFloat(cropBox.style.width) || 0,
+    height: parseFloat(cropBox.style.height) || 0
+  };
+}
+
+// Dragging the box around (move)
+let dragState = null;
+cropBox.addEventListener('pointerdown', (e) => {
+  if (e.target === cropHandle) return; // handle has its own listener
+  cropBox.setPointerCapture(e.pointerId);
+  const box = getCropBoxRect();
+  dragState = { startX: e.clientX, startY: e.clientY, boxLeft: box.left, boxTop: box.top };
+  e.preventDefault();
+});
+cropBox.addEventListener('pointermove', (e) => {
+  if (!dragState) return;
+  const img = getImageDisplayRect();
+  const box = getCropBoxRect();
+  let newLeft = dragState.boxLeft + (e.clientX - dragState.startX);
+  let newTop = dragState.boxTop + (e.clientY - dragState.startY);
+  newLeft = Math.max(img.left, Math.min(newLeft, img.left + img.width - box.width));
+  newTop = Math.max(img.top, Math.min(newTop, img.top + img.height - box.height));
+  setCropBoxRect(newLeft, newTop, box.width, box.height);
+});
+cropBox.addEventListener('pointerup', () => { dragState = null; });
+cropBox.addEventListener('pointercancel', () => { dragState = null; });
+
+// Resizing via the corner handle
+let resizeState = null;
+cropHandle.addEventListener('pointerdown', (e) => {
+  cropHandle.setPointerCapture(e.pointerId);
+  const box = getCropBoxRect();
+  resizeState = { startX: e.clientX, startY: e.clientY, w: box.width, h: box.height, left: box.left, top: box.top };
+  e.preventDefault();
+  e.stopPropagation();
+});
+cropHandle.addEventListener('pointermove', (e) => {
+  if (!resizeState) return;
+  const img = getImageDisplayRect();
+  let newW = resizeState.w + (e.clientX - resizeState.startX);
+  let newH = resizeState.h + (e.clientY - resizeState.startY);
+  newW = Math.max(30, Math.min(newW, img.left + img.width - resizeState.left));
+  newH = Math.max(20, Math.min(newH, img.top + img.height - resizeState.top));
+  setCropBoxRect(resizeState.left, resizeState.top, newW, newH);
+});
+cropHandle.addEventListener('pointerup', () => { resizeState = null; });
+cropHandle.addEventListener('pointercancel', () => { resizeState = null; });
+
+// ---- Step 3: preprocessing — grayscale + contrast stretch, done on a canvas ----
+// Cheap, dependency-free, and it's what tends to matter most for
+// Tesseract on phone photos: flat lighting + low contrast is the
+// single biggest cause of misreads, more than resolution.
+function preprocessCanvas(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  const gray = new Float32Array(w * h);
+  let min = 255, max = 0;
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    gray[p] = g;
+    if (g < min) min = g;
+    if (g > max) max = g;
+  }
+  const range = Math.max(1, max - min);
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    const v = Math.round((gray[p] - min) * (255 / range));
+    d[i] = d[i + 1] = d[i + 2] = v;
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+// Crops (or, if skipped, takes the whole image) then upscales small
+// crops so digits aren't just a handful of pixels tall, then runs the
+// grayscale/contrast pass above.
+function buildProcessedImage(sourceRectOrNull) {
+  const naturalW = cropImage.naturalWidth, naturalH = cropImage.naturalHeight;
+  let sx, sy, sw, sh;
+
+  if (sourceRectOrNull) {
+    const img = getImageDisplayRect();
+    const scaleX = naturalW / img.width;
+    const scaleY = naturalH / img.height;
+    sx = (sourceRectOrNull.left - img.left) * scaleX;
+    sy = (sourceRectOrNull.top - img.top) * scaleY;
+    sw = sourceRectOrNull.width * scaleX;
+    sh = sourceRectOrNull.height * scaleY;
+  } else {
+    sx = 0; sy = 0; sw = naturalW; sh = naturalH;
+  }
+
+  const targetMinWidth = 700;
+  const scale = sw < targetMinWidth ? Math.min(4, targetMinWidth / sw) : 1;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(sw * scale));
+  canvas.height = Math.max(1, Math.round(sh * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(cropImage, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  preprocessCanvas(canvas);
+  return canvas.toDataURL('image/png');
+}
+
+document.getElementById('cropConfirmBtn').addEventListener('click', () => {
+  const rect = getCropBoxRect();
+  if (!rect.width || !rect.height || rect.width < 10 || rect.height < 10) {
+    alert('The crop box looks too small — drag the orange corner to make it bigger, then try again.');
+    return;
+  }
+  try {
+    const processed = buildProcessedImage(rect);
+    document.getElementById('cropModal').classList.remove('show');
+    proceedToOdoModal(processed);
+  } catch (err) {
+    alert('Could not use that crop (' + err.message + ') — try adjusting the box, or use the full photo instead.');
+  }
+});
+document.getElementById('cropSkipBtn').addEventListener('click', () => {
+  try {
+    const processed = buildProcessedImage(null);
+    document.getElementById('cropModal').classList.remove('show');
+    proceedToOdoModal(processed);
+  } catch (err) {
+    document.getElementById('cropModal').classList.remove('show');
+    alert('Could not process that photo (' + err.message + ').');
+  }
+});
+
+// ---- Step 4: show the (cropped + processed) image and run OCR on it ----
+async function proceedToOdoModal(processedDataUrl) {
+  document.getElementById('odoPreview').src = processedDataUrl;
+  document.getElementById('odoKmInput').value = '';
+  document.getElementById('odoDateInput').value = todayInputValue();
+  document.getElementById('odoModal').classList.add('show');
+
+  const ocrStatus = document.getElementById('ocrStatus');
+  ocrStatus.style.display = 'flex';
+  ocrStatus.innerHTML = '<div class="spinner"></div> Reading number from photo…';
+
+  try {
+    await loadTesseract();
+    const worker = await Tesseract.createWorker('eng');
+
+    async function tryRead(psm) {
+      await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: psm });
+      const { data: { text } } = await worker.recognize(processedDataUrl);
+      return (text.match(/\d+/g) || []).sort((a, b) => b.length - a.length);
+    }
+
+    // PSM 7 = single line of text — right fit for a tight digit-strip crop.
+    // A tight crop has no paragraphs for Tesseract's default layout guesser
+    // to find, so without this hint it often returns noise instead of the
+    // actual digits. If that still comes up empty (e.g. a more skewed
+    // photo), fall back to PSM 6 (a single uniform block) before giving up.
+    let digitGroups = await tryRead('7');
+    if (!digitGroups.length) digitGroups = await tryRead('6');
+    await worker.terminate();
+
+    if (digitGroups.length) {
+      document.getElementById('odoKmInput').value = digitGroups[0];
+      ocrStatus.textContent = 'Detected ' + digitGroups[0] + ' — check it against the photo before saving.';
+    } else {
+      ocrStatus.textContent = 'Could not read a number automatically — type it in below.';
+    }
+  } catch (err) {
+    ocrStatus.textContent = 'Automatic reading unavailable — type the number in below.';
+  }
+}
+
+document.getElementById('odoCancelBtn').addEventListener('click', () => {
+  document.getElementById('odoModal').classList.remove('show');
+  ocrTargetKmFieldId = null;
+});
+
+document.getElementById('odoConfirmBtn').addEventListener('click', async () => {
+  const kmVal = document.getElementById('odoKmInput').value.trim();
+  const dateVal = document.getElementById('odoDateInput').value;
+
+  if (!kmVal) {
+    alert('Enter the kilometers reading before saving.');
+    return;
+  }
+  if (!ocrTargetKmFieldId) return;
+
+  const kmInput = document.getElementById(ocrTargetKmFieldId);
+  if (kmInput) kmInput.value = kmVal;
+
+  if (dateHeaderName) {
+    const dateInput = document.querySelector('#editSection [data-header="' + CSS.escape(dateHeaderName) + '"]');
+    if (dateInput) dateInput.value = dateVal;
+  }
+
+  document.getElementById('odoModal').classList.remove('show');
+  ocrTargetKmFieldId = null;
+
+  // Photo flow only touches the km reading + date, so the quick save
+  // (km + date only) is the right write here.
+  await performQuickSave();
+});
+</script>
+
+
+<script>
+/* ---- Date-in-words labels (shared across all pages) ----
+   Every <input type="date"> gets a small red label right after it that
+   writes the selected date out in words -- e.g. "8 July 2026" -- so a
+   date like 08/07 can never be misread as August 7 (American style).
+   You still pick the date in the box exactly as before; this only
+   changes what's DISPLAYED, never what's saved to the sheet.
+   Handles date boxes created later (e.g. the Return picker on Bikes
+   Status) via a DOM observer, and values set by code (prefills,
+   defaults) via a light polling loop. */
+(function () {
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function dateWords(iso) {
+    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(iso || '');
+    if (!m) return '';
+    var monthIdx = parseInt(m[2], 10) - 1;
+    if (monthIdx < 0 || monthIdx > 11) return '';
+    return parseInt(m[3], 10) + ' ' + MONTHS[monthIdx] + ' ' + parseInt(m[1], 10);
+  }
+
+  function ensureLabel(inp) {
+    var el = inp.__dateWordsEl;
+    if (el && el.parentNode) return el;
+    el = document.createElement('span');
+    el.className = 'date-words-label';
+    el.style.cssText = 'display:inline-block;font-size:12.5px;font-weight:700;' +
+      'color:#C62828;margin-top:3px;margin-left:2px;line-height:1.25;white-space:nowrap;';
+    if (inp.nextSibling) {
+      inp.parentNode.insertBefore(el, inp.nextSibling);
+    } else {
+      inp.parentNode.appendChild(el);
+    }
+    inp.__dateWordsEl = el;
+    return el;
+  }
+
+  function refreshDateWordLabels() {
+    var inputs = document.querySelectorAll('input[type="date"]');
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      if (!inp.parentNode) continue;
+      var el = ensureLabel(inp);
+      var text = dateWords(inp.value);
+      if (el.textContent !== text) el.textContent = text;
+    }
+  }
+
+  // React immediately when the user picks/types a date.
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+
+  // Catch date boxes that get created after page load (re-rendered lists,
+  // pop-up pickers). refreshDateWordLabels is idempotent, so the observer
+  // re-firing on its own label insertions settles immediately.
+  if (window.MutationObserver) {
+    new MutationObserver(refreshDateWordLabels)
+      .observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  // Catch values set by code (defaults, prefills from other pages), which
+  // fire no events. A few date boxes at 2 checks/second costs nothing.
+  setInterval(refreshDateWordLabels, 500);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshDateWordLabels);
+  } else {
+    refreshDateWordLabels();
+  }
+})();
+</script>
+
+</body>
+</html>

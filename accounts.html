@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accounts — AA Scooters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sand:#F5EFE6;
+    --ink:#1A2421;
+    --petrol:#0F3D3E;
+    --petrol-light:#175A5B;
+    --cone:#FF6B35;
+    --card:#FFFFFF;
+    --line:#DED4C2;
+    --muted:#5A6663;
+    --ok:#2F855A;
+    --bad:#C53030;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--sand); color:var(--ink);
+    font-family:'Inter',sans-serif; min-height:100vh;
+  }
+  .topbar{
+    background:var(--petrol); padding:14px 16px; display:flex;
+    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .topbar .brand{ display:flex; align-items:center; gap:8px; text-decoration:none; }
+  .topbar .brand img{ width:28px; height:28px; object-fit:contain; }
+  .topbar .brand span{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
+    color:#fff; letter-spacing:.02em;
+  }
+  .topbar nav{ display:flex; gap:16px; flex-wrap:wrap; }
+  .topbar nav a{
+    color:#CFE3E0; text-decoration:none; font-size:12.5px; font-weight:500;
+    padding:3px 0; border-bottom:2px solid transparent;
+  }
+  .topbar nav a:hover{ color:#fff; }
+  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
+
+  .page-head{ max-width:960px; margin:0 auto; padding:22px 16px 4px; }
+  .page-head h1{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
+    color:var(--petrol); margin:0;
+  }
+  .page-head .sub{ color:var(--muted); font-size:13px; margin-top:6px; line-height:1.5; }
+
+  main{ max-width:960px; margin:0 auto; padding:16px 16px 60px; }
+
+  .load-status{
+    font-size:12px; color:#B36A2E; background:#FFF3E6; border:1px solid #F3D9B8;
+    border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none;
+  }
+  .load-status.show{ display:block; }
+
+  /* Month selector */
+  .month-bar{
+    display:flex; align-items:center; gap:10px; margin-bottom:20px;
+  }
+  .month-bar button{
+    flex-shrink:0; width:40px; height:40px; border-radius:9px;
+    border:1px solid var(--line); background:var(--card); color:var(--petrol);
+    font-size:18px; font-weight:700; cursor:pointer; display:flex;
+    align-items:center; justify-content:center; padding:0;
+  }
+  .month-bar button:active{ transform:scale(.95); }
+  .month-bar button:disabled{ opacity:.4; cursor:default; }
+  .month-bar select{
+    flex:1; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
+    font-size:15px; font-family:'Barlow Condensed',sans-serif; font-weight:700;
+    letter-spacing:.03em; background:var(--card); color:var(--petrol);
+    text-align:center; text-transform:uppercase;
+  }
+
+  .columns{
+    display:grid; grid-template-columns:1fr 1fr; gap:20px;
+  }
+  @media (max-width:700px){
+    .columns{ grid-template-columns:1fr; }
+  }
+
+  .section h2{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:18px;
+    color:var(--petrol); margin:0 0 4px;
+  }
+  .section .desc{ font-size:12.5px; color:var(--muted); margin-bottom:12px; line-height:1.5; }
+
+  .row{
+    background:var(--card); border:1px solid var(--line); border-radius:9px;
+    padding:10px 12px; margin-bottom:8px; font-size:13.5px;
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .row .left{ min-width:0; }
+  .row .title{ color:var(--ink); font-weight:500; }
+  .row .meta{ color:var(--muted); font-size:12px; margin-top:2px; }
+  .row .amt{ font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px; white-space:nowrap; }
+  .row .amt.expense{ color:var(--bad); }
+  .row .amt.income{ color:var(--ok); }
+  .row .chips{ display:flex; gap:6px; flex-wrap:wrap; margin-top:5px; }
+  .row .chip{
+    font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px;
+    white-space:nowrap;
+  }
+  .row .chip.name{ background:#EAF1EE; color:var(--petrol); }
+  .row .chip.pay{ background:#FFF3E6; color:#B36A2E; }
+
+  .empty-hint{ font-size:13px; color:#8A948F; padding:8px 2px; }
+
+  .total-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--petrol); color:#fff; border-radius:10px;
+    padding:12px 14px; margin-top:4px;
+  }
+  .total-bar .l{
+    font-family:'Barlow Condensed',sans-serif; font-size:12.5px; font-weight:600;
+    letter-spacing:.08em; text-transform:uppercase; color:#CFE3E0;
+  }
+  .total-bar .n{ font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:20px; }
+
+  .btn-row{ display:flex; gap:10px; margin-top:12px; }
+  .btn-row button{
+    flex:1; padding:13px; border:none; border-radius:10px;
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:14px;
+    letter-spacing:.03em; text-transform:uppercase; cursor:pointer;
+  }
+  .btn-row button:active{ transform:scale(.98); }
+  .btn-add{ background:var(--cone); color:#fff; }
+
+  .row.clickable{ cursor:pointer; }
+  .row.clickable:active{ transform:scale(.99); }
+
+  /* Modal */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(15,36,33,.45);
+    display:none; align-items:flex-end; justify-content:center; z-index:1000;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal-sheet{
+    background:var(--card); width:100%; max-width:480px;
+    border-radius:16px 16px 0 0; padding:20px 18px 24px;
+    max-height:90vh; overflow-y:auto;
+  }
+  @media (min-width:560px){
+    .modal-backdrop{ align-items:center; }
+    .modal-sheet{ border-radius:16px; }
+  }
+  .modal-sheet h3{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:20px;
+    color:var(--petrol); margin:0 0 14px;
+  }
+  .field{ margin-bottom:12px; position:relative; }
+  .field label{
+    display:block; font-size:12px; font-weight:600; color:var(--muted);
+    margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em;
+  }
+  .field input, .field select{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
+    font-size:14.5px; font-family:'Inter',sans-serif; background:#FBFAF7; color:var(--ink);
+  }
+  .field input:focus, .field select:focus{ outline:none; border-color:var(--petrol-light); background:#fff; }
+  .ac-list{
+    position:absolute; left:0; right:0; top:100%;
+    background:#fff; border:1px solid var(--line); border-top:none;
+    border-radius:0 0 9px 9px;
+    max-height:220px; overflow-y:auto;
+    z-index:20; display:none;
+    box-shadow:0 8px 18px rgba(15,61,62,.1);
+  }
+  .ac-list.show{ display:block; }
+  .ac-item{
+    padding:10px 12px; font-size:14px; cursor:pointer;
+    border-bottom:1px solid #F0EBE0;
+  }
+  .ac-item:last-child{ border-bottom:none; }
+  .ac-item:hover, .ac-item.hi{ background:#F5EFE6; }
+  .ac-item mark{ background:#FFE3D2; color:var(--ink); border-radius:2px; }
+
+  .bike-split-row{
+    position:relative; margin-bottom:14px; padding-bottom:12px;
+    border-bottom:1px solid var(--line);
+  }
+  .bike-split-row:last-child{ border-bottom:none; margin-bottom:0; padding-bottom:0; }
+  .bike-split-row .bike-split-name-wrap{ position:relative; margin-bottom:8px; }
+  .bike-split-row input[type="text"]{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
+    font-size:14.5px; font-family:'Inter',sans-serif; background:#FBFAF7; color:var(--ink);
+  }
+  .bike-split-row input[type="text"]:focus{ outline:none; border-color:var(--petrol-light); background:#fff; }
+  .bike-split-bottom-row{ display:flex; gap:8px; }
+  .bike-split-bottom-row .bike-split-amount{ flex:1; min-width:0; }
+  .bike-split-remove{
+    flex-shrink:0; width:44px; border:none; border-radius:9px;
+    background:#FCEBEB; color:var(--bad); font-size:18px; cursor:pointer; line-height:1;
+  }
+  .modal-error{
+    font-size:12.5px; color:var(--bad); background:#FCEBEB; border:1px solid #F3C6C6;
+    border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none;
+  }
+  .modal-error.show{ display:block; }
+  .modal-btn-row{ display:flex; gap:10px; margin-top:16px; }
+  .modal-btn-row button{
+    flex:1; padding:13px; border:none; border-radius:10px;
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:14px;
+    letter-spacing:.03em; text-transform:uppercase; cursor:pointer;
+  }
+  .modal-btn-row button:active{ transform:scale(.98); }
+  .btn-save{ background:var(--cone); color:#fff; }
+  .btn-cancel{ background:#EFEAE0; color:var(--petrol); }
+  .btn-delete{ background:var(--bad); color:#fff; }
+  .btn-save:disabled, .btn-delete:disabled{ opacity:.6; }
+
+  .disambig-msg{ font-size:13.5px; color:var(--muted); margin-bottom:12px; line-height:1.5; }
+  .disambig-option{
+    display:block; width:100%; text-align:left; padding:11px 12px; margin-bottom:8px;
+    border:1px solid var(--line); border-radius:9px; background:#FBFAF7; color:var(--ink);
+    font-family:'Inter',sans-serif; font-size:13.5px; cursor:pointer;
+  }
+  .disambig-option:hover{ border-color:var(--petrol-light); background:#fff; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="index.html">
+    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
+    <span>AA Scooter Rental</span>
+  </a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="customers.html">Customer Record</a>
+    <a href="pricing.html">Price Calculator</a>
+    <a href="parts.html">Parts &amp; Oil</a>
+    <a href="oilchange.html">Oil Change</a>
+    <a href="bikes.html">Bikes Status</a>
+    <a href="bikephotos.html">Bike Photos</a>
+    <a href="available-bikes.html">Available Bikes</a>
+    <a href="accounts.html" class="active">Accounts</a>
+  </nav>
+</div>
+
+<div class="page-head">
+  <h1>Accounts</h1>
+  <div class="sub">Expenses and income for the selected month.</div>
+</div>
+
+<main>
+  <div class="load-status" id="loadStatus"></div>
+
+  <div class="month-bar">
+    <button id="prevMonthBtn" type="button" aria-label="Previous month">‹</button>
+    <select id="monthSelect"></select>
+    <button id="nextMonthBtn" type="button" aria-label="Next month">›</button>
+  </div>
+
+  <div class="columns">
+    <div class="section" id="expensesSection">
+      <h2>Expenses</h2>
+      <div class="desc">Every expense row logged this month.</div>
+      <div class="btn-row" style="margin-top:0; margin-bottom:14px;">
+        <button class="btn-add" id="addExpenseBtnTop">Add Expense</button>
+      </div>
+      <div id="expensesList"></div>
+      <div class="total-bar">
+        <div class="l">Total Expenses</div>
+        <div class="n" id="totalExpenses">—</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-add" id="addExpenseBtn">Add Expense</button>
+      </div>
+    </div>
+
+    <div class="section" id="incomeSection">
+      <h2>Income</h2>
+      <div class="desc">Every income row logged this month.</div>
+      <div class="btn-row" style="margin-top:0; margin-bottom:14px;">
+        <button class="btn-add" id="addIncomeBtnTop">Add Income</button>
+      </div>
+      <div id="incomeList"></div>
+      <div class="total-bar">
+        <div class="l">Total Income</div>
+        <div class="n" id="totalIncome">—</div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-add" id="addIncomeBtn">Add Income</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal-sheet">
+    <h3 id="modalTitle">Add Expense</h3>
+    <div class="modal-error" id="modalError"></div>
+
+    <div id="modalFields">
+    <div class="field">
+      <label for="fDate">Date</label>
+      <input type="date" id="fDate">
+    </div>
+    <div class="field" id="fExpenseField">
+      <label for="fExpense">Expense</label>
+      <input type="text" id="fExpense" placeholder="e.g. Fuel, repairs, rent">
+    </div>
+    <div class="field" id="fIncomeField">
+      <label for="fIncome">Income</label>
+      <input type="text" id="fIncome" placeholder="e.g. Bike rental">
+    </div>
+    <div class="field" id="fNameField">
+      <label for="fName">Name</label>
+      <input type="text" id="fName" placeholder="Customer name">
+    </div>
+    <div class="field">
+      <label for="fAmount">Amount (฿)</label>
+      <input type="number" id="fAmount" step="0.01" placeholder="0.00">
+    </div>
+    <div class="field" id="fExpensePaymentField">
+      <label for="fExpensePayment">Payment method</label>
+      <select id="fExpensePayment">
+        <option value="">— Select —</option>
+        <option value="Bank">Bank</option>
+        <option value="Cash">Cash</option>
+      </select>
+    </div>
+    <div class="field" id="fExpenseTypeField">
+      <label for="fExpenseType">Type</label>
+      <select id="fExpenseType">
+        <option value="business">Business</option>
+        <option value="personal">Personal</option>
+        <option value="wages">Wages/Bike Purchase</option>
+        <option value="transfer">To Transfer</option>
+      </select>
+    </div>
+    <div class="field" id="fExpenseBikeToggleField">
+      <label style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:normal; font-size:13.5px; font-weight:500; color:var(--ink);">
+        <input type="checkbox" id="fExpenseBikeToggle" style="width:auto;">
+        Split this expense across one or more bikes
+      </label>
+    </div>
+    <div id="fExpenseBikeSplitsField" style="display:none; margin-bottom:12px;">
+      <div id="bikeSplitRows"></div>
+      <button type="button" class="btn-cancel" id="addBikeSplitBtn" style="width:100%; padding:9px; font-size:13px; margin-top:8px;">+ Add another bike</button>
+    </div>
+    <div class="field" id="fPaidByField">
+      <label for="fPaidBy">Payment method</label>
+      <select id="fPaidBy">
+        <option value="">— Select —</option>
+        <option value="Cash">Cash</option>
+        <option value="Scan">Scan</option>
+        <option value="Wise">Wise</option>
+        <option value="Revolut">Revolut</option>
+      </select>
+    </div>
+
+    <div class="modal-btn-row">
+      <button class="btn-delete" id="modalDeleteBtn" type="button" style="display:none;">Delete</button>
+      <button class="btn-cancel" id="modalCancelBtn" type="button">Cancel</button>
+      <button class="btn-save" id="modalSaveBtn" type="button">Save</button>
+    </div>
+    </div>
+
+    <div id="cashDisambigPanel" style="display:none;">
+      <div class="disambig-msg">This entry matches more than one row on the "cash" sheet — which one is it?</div>
+      <div id="cashDisambigList"></div>
+      <div class="modal-btn-row">
+        <button class="btn-cancel" id="cashDisambigCancelBtn" type="button">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
+
+const MONTH_NAMES = ['January','February','March','April','May','June',
+  'July','August','September','October','November','December'];
+
+// Populate the month dropdown once, up front.
+const monthSelect = document.getElementById('monthSelect');
+MONTH_NAMES.forEach((name, i) => {
+  const opt = document.createElement('option');
+  opt.value = i;
+  opt.textContent = name;
+  monthSelect.appendChild(opt);
+});
+
+function setLoadStatus(msg, isError) {
+  const el = document.getElementById('loadStatus');
+  if (!msg) { el.classList.remove('show'); el.textContent = ''; return; }
+  el.textContent = msg;
+  el.style.color = isError ? '#C53030' : '#B36A2E';
+  el.style.background = isError ? '#FCEBEB' : '#FFF3E6';
+  el.style.borderColor = isError ? '#F3C6C6' : '#F3D9B8';
+  el.classList.add('show');
+}
+
+// dd/MM/yyyy (how the sheet stores it) <-> yyyy-MM-dd (what <input type="date"> needs).
+function dmyToIso(s) {
+  const m = (s || '').toString().trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return '';
+  const d = m[1].padStart(2, '0'), mo = m[2].padStart(2, '0'), y = m[3];
+  return `${y}-${mo}-${d}`;
+}
+
+// The reverse of dmyToIso -- used to build a locally-rendered row right
+// after a successful Save, without waiting on a full reload from the sheet.
+function isoToDmy(s) {
+  const m = (s || '').toString().trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!m) return '';
+  const y = m[1], mo = m[2].padStart(2, '0'), d = m[3].padStart(2, '0');
+  return `${d}/${mo}/${y}`;
+}
+
+// Today's date as yyyy-MM-dd, in the browser's local timezone, for
+// defaulting the Add Expense/Income date field.
+function todayIso() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${day}`;
+}
+
+function money(n) {
+  if (n === '' || n === null || n === undefined || isNaN(Number(n))) return '—';
+  const num = Number(n);
+  const sign = num < 0 ? '-' : '';
+  return sign + '฿' + Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+let currentExpenses = [];
+let currentIncome = [];
+
+// Mirrors EXPENSE_TYPE_COLORS in Code.gs, so the in-app list gives the same
+// at-a-glance color cue as the spreadsheet's expense description cell.
+const EXPENSE_TYPE_COLORS = {
+  business: null,
+  personal: '#cfe2f3',
+  wages: '#f6b26b',
+  transfer: '#fff2cc'
+};
+const EXPENSE_TYPE_LABELS = {
+  business: 'Business', personal: 'Personal', wages: 'Wages/Bike Purchase', transfer: 'To Transfer'
+};
+
+function renderExpenses(expenses) {
+  currentExpenses = expenses;
+  const list = document.getElementById('expensesList');
+  if (!expenses.length) {
+    list.innerHTML = '<div class="empty-hint">No expenses logged this month.</div>';
+  } else {
+    list.innerHTML = expenses.map((e, i) => {
+      const bg = EXPENSE_TYPE_COLORS[e.type];
+      return `
+      <div class="row clickable" data-index="${i}" ${bg ? `style="background:${bg};"` : ''}>
+        <div class="left">
+          <div class="title">${e.expense || '—'}</div>
+          <div class="meta">${e.date || ''}</div>
+          <div class="chips">
+            ${e.payment ? `<span class="chip pay">Payment: ${e.payment}</span>` : ''}
+            ${e.type && e.type !== 'business' ? `<span class="chip name">${EXPENSE_TYPE_LABELS[e.type]}</span>` : ''}
+          </div>
+        </div>
+        <div class="amt expense">${money(e.amount)}</div>
+      </div>
+    `;
+    }).join('');
+    list.querySelectorAll('.row').forEach(rowEl => {
+      rowEl.addEventListener('click', () => openExpenseModal(currentExpenses[Number(rowEl.dataset.index)]));
+    });
+  }
+  const total = expenses.reduce((sum, e) => sum + (typeof e.amount === 'number' ? e.amount : 0), 0);
+  document.getElementById('totalExpenses').textContent = money(total);
+}
+
+function renderIncome(income) {
+  currentIncome = income;
+  const list = document.getElementById('incomeList');
+  if (!income.length) {
+    list.innerHTML = '<div class="empty-hint">No income logged this month.</div>';
+  } else {
+    list.innerHTML = income.map((r, i) => `
+      <div class="row clickable" data-index="${i}">
+        <div class="left">
+          <div class="title">${r.income || '—'}</div>
+          <div class="meta">${r.date || ''}</div>
+          <div class="chips">
+            ${r.name ? `<span class="chip name">Name: ${r.name}</span>` : ''}
+            ${r.paidBy ? `<span class="chip pay">Payment: ${r.paidBy}</span>` : ''}
+          </div>
+        </div>
+        <div class="amt income">${money(r.amount)}</div>
+      </div>
+    `).join('');
+    list.querySelectorAll('.row').forEach(rowEl => {
+      rowEl.addEventListener('click', () => openIncomeModal(currentIncome[Number(rowEl.dataset.index)]));
+    });
+  }
+  const total = income.reduce((sum, r) => sum + (typeof r.amount === 'number' ? r.amount : 0), 0);
+  document.getElementById('totalIncome').textContent = money(total);
+}
+
+let loadToken = 0;
+
+async function loadMonth(monthIndex) {
+  const myToken = ++loadToken;
+  monthSelect.value = monthIndex;
+  document.getElementById('prevMonthBtn').disabled = monthIndex <= 0;
+  document.getElementById('nextMonthBtn').disabled = monthIndex >= 11;
+
+  setLoadStatus('Loading ' + MONTH_NAMES[monthIndex] + '…');
+  document.getElementById('expensesList').innerHTML = '';
+  document.getElementById('incomeList').innerHTML = '';
+  document.getElementById('totalExpenses').textContent = '—';
+  document.getElementById('totalIncome').textContent = '—';
+
+  try {
+    const res = await fetch(scriptUrl + '?action=accounts&month=' + monthIndex).then(r => r.json());
+    if (myToken !== loadToken) return; // A newer month was selected while this was in flight.
+
+    if (!res.success) {
+      setLoadStatus(res.error || ('No sheet found for ' + MONTH_NAMES[monthIndex] + '.'), true);
+      return;
+    }
+    setLoadStatus(null);
+    renderExpenses(res.expenses || []);
+    renderIncome(res.income || []);
+  } catch (err) {
+    if (myToken !== loadToken) return;
+    setLoadStatus('Failed to load: ' + err.message, true);
+  }
+}
+
+document.getElementById('prevMonthBtn').addEventListener('click', () => {
+  const i = Number(monthSelect.value);
+  if (i > 0) loadMonth(i - 1);
+});
+document.getElementById('nextMonthBtn').addEventListener('click', () => {
+  const i = Number(monthSelect.value);
+  if (i < 11) loadMonth(i + 1);
+});
+monthSelect.addEventListener('change', () => loadMonth(Number(monthSelect.value)));
+
+// Fetched once, up front -- feeds the "attach to bike" search field's
+// autocomplete list when adding/editing an expense. A failure here isn't
+// fatal to the page; the field just won't suggest anything until a reload.
+let bikesNames = [];
+async function loadBikesList() {
+  try {
+    const res = await fetch(scriptUrl + '?action=bikesList').then(r => r.json());
+    if (!res.success) return;
+    bikesNames = res.bikes || [];
+  } catch (err) {
+    // Swallow -- the field just has nothing to suggest if this fails.
+  }
+}
+loadBikesList();
+
+// Same tokenMatch/highlight substring-search helpers already used for the
+// Nationality and bike-model autocompletes on the Customer Record page --
+// every typed word (in any order) must appear somewhere in the option.
+function tokenMatch(value, query) {
+  if (!query) return true;
+  const v = (value || '').toString().toLowerCase();
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return tokens.every(t => v.includes(t));
+}
+function highlight(value, query) {
+  let out = String(value || '');
+  const tokens = (query || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+  tokens.forEach(t => {
+    if (!t) return;
+    const re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
+    out = out.replace(re, '<mark>$1</mark>');
+  });
+  return out;
+}
+
+// Generic "type to filter, or click/focus to see everything" autocomplete,
+// same UX as the Nationality field on the Customer Record page. getOptions
+// is a function rather than a fixed array so this keeps working even
+// though bikesNames is still loading (async) when this is first attached.
+// id-based wrapper for static fields (looks up the input + its sibling
+// .ac-list[data-for] by id, same as the Customer Record page's fields).
+function attachAutocomplete(inputId, getOptions) {
+  const input = document.getElementById(inputId);
+  const list = document.querySelector('.ac-list[data-for="' + inputId + '"]');
+  attachAutocompleteToElements(input, list, getOptions);
+}
+
+// Elements-based core -- used directly for the dynamically-created bike
+// split rows below, where there's no fixed id to look up (rows are added
+// and removed at runtime).
+function attachAutocompleteToElements(input, list, getOptions) {
+  if (!input || !list) return;
+  let hiIndex = -1;
+
+  function close() {
+    list.classList.remove('show');
+    list.innerHTML = '';
+    hiIndex = -1;
+  }
+
+  function open(query) {
+    const all = getOptions() || [];
+    const options = (query ? all.filter(v => tokenMatch(v, query)) : all).slice(0, 60);
+    if (!options.length) { close(); return; }
+    list.innerHTML = options.map((v, i) =>
+      `<div class="ac-item" data-index="${i}">${highlight(v, query || '')}</div>`
+    ).join('');
+    list.classList.add('show');
+    hiIndex = -1;
+    Array.from(list.children).forEach((el, i) => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        input.value = options[i];
+        close();
+      });
+    });
+    list._options = options;
+  }
+
+  input.addEventListener('input', () => open(input.value.trim()));
+  input.addEventListener('focus', () => open(input.value.trim()));
+
+  input.addEventListener('keydown', (e) => {
+    const items = Array.from(list.children);
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (hiIndex >= 0 && list._options) {
+        input.value = list._options[hiIndex];
+      }
+      close();
+      return;
+    }
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      hiIndex = Math.min(hiIndex + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+      items[hiIndex] && items[hiIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      hiIndex = Math.max(hiIndex - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+      items[hiIndex] && items[hiIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !list.contains(e.target)) close();
+  });
+}
+
+// ---------------- Add/Edit modal ----------------
+
+const modalBackdrop = document.getElementById('modalBackdrop');
+const modalTitle = document.getElementById('modalTitle');
+const modalError = document.getElementById('modalError');
+const fDate = document.getElementById('fDate');
+const fExpense = document.getElementById('fExpense');
+const fIncome = document.getElementById('fIncome');
+const fName = document.getElementById('fName');
+const fAmount = document.getElementById('fAmount');
+const fPaidBy = document.getElementById('fPaidBy');
+const fExpensePayment = document.getElementById('fExpensePayment');
+const fExpenseType = document.getElementById('fExpenseType');
+const fExpenseTypeField = document.getElementById('fExpenseTypeField');
+const fExpenseBikeToggle = document.getElementById('fExpenseBikeToggle');
+const fExpenseBikeToggleField = document.getElementById('fExpenseBikeToggleField');
+const fExpenseBikeSplitsField = document.getElementById('fExpenseBikeSplitsField');
+const bikeSplitRows = document.getElementById('bikeSplitRows');
+
+// Builds one "bike + amount" row for the split-expense UI, with its own
+// autocomplete (bikesNames) and a remove button. Used both when the user
+// clicks "+ Add another bike" and when re-populating an existing entry's
+// splits in openModal.
+function addBikeSplitRow(bikeName, amount) {
+  const row = document.createElement('div');
+  row.className = 'bike-split-row';
+  row.innerHTML = `
+    <div class="bike-split-name-wrap">
+      <input type="text" class="bike-split-name" placeholder="Bike" autocomplete="off">
+      <div class="ac-list"></div>
+    </div>
+    <div class="bike-split-bottom-row">
+      <input type="text" inputmode="decimal" class="bike-split-amount" placeholder="Amount (฿)">
+      <button type="button" class="bike-split-remove" aria-label="Remove this bike">×</button>
+    </div>
+  `;
+  const nameInput = row.querySelector('.bike-split-name');
+  const list = row.querySelector('.ac-list');
+  nameInput.value = bikeName || '';
+  row.querySelector('.bike-split-amount').value = (amount === '' || amount === undefined || amount === null) ? '' : amount;
+  attachAutocompleteToElements(nameInput, list, () => bikesNames);
+  row.querySelector('.bike-split-remove').addEventListener('click', () => row.remove());
+  bikeSplitRows.appendChild(row);
+}
+
+// Reads back every filled-in (bike + amount) pair currently in the split
+// rows -- rows with a blank bike name or blank/invalid amount are ignored,
+// so an empty leftover row from "+ Add another bike" is simply dropped
+// rather than causing a validation error.
+function collectBikeSplits() {
+  return Array.from(bikeSplitRows.querySelectorAll('.bike-split-row')).map(row => {
+    const bike = row.querySelector('.bike-split-name').value.trim();
+    const amtRaw = row.querySelector('.bike-split-amount').value.trim();
+    const amount = amtRaw === '' ? '' : Number(amtRaw);
+    return { bike, amount };
+  }).filter(s => s.bike && s.amount !== '' && !isNaN(s.amount));
+}
+
+document.getElementById('addBikeSplitBtn').addEventListener('click', () => addBikeSplitRow('', ''));
+const fExpenseField = document.getElementById('fExpenseField');
+const fIncomeField = document.getElementById('fIncomeField');
+const fNameField = document.getElementById('fNameField');
+const fPaidByField = document.getElementById('fPaidByField');
+const fExpensePaymentField = document.getElementById('fExpensePaymentField');
+const modalSaveBtn = document.getElementById('modalSaveBtn');
+const modalDeleteBtn = document.getElementById('modalDeleteBtn');
+const modalFields = document.getElementById('modalFields');
+const cashDisambigPanel = document.getElementById('cashDisambigPanel');
+const cashDisambigList = document.getElementById('cashDisambigList');
+const cashDisambigCancelBtn = document.getElementById('cashDisambigCancelBtn');
+
+// modalMode is one of: 'addExpense', 'editExpense', 'addIncome', 'editIncome'
+let modalMode = null;
+let modalEditRow = null; // sheet row number, only set when editing
+let pendingPayload = null; // last save/delete payload, kept around in case the
+                           // server asks us to disambiguate a "cash" sheet match
+
+function setModalError(msg) {
+  if (!msg) { modalError.classList.remove('show'); modalError.textContent = ''; return; }
+  modalError.textContent = msg;
+  modalError.classList.add('show');
+}
+
+// Selects the option matching rawValue, ignoring case/whitespace, so a
+// sheet cell like "cash" still preselects the "Cash" option. Leaves the
+// select on its blank default if nothing matches.
+function setSelectValueCI(selectEl, rawValue) {
+  const val = (rawValue || '').toString().trim();
+  if (!val) { selectEl.value = ''; return; }
+  const match = Array.from(selectEl.options).find(o => o.value.toLowerCase() === val.toLowerCase());
+  selectEl.value = match ? match.value : '';
+}
+
+function openModal(mode, isIncome, entry) {
+  modalMode = mode;
+  modalEditRow = entry ? entry.row : null;
+  setModalError(null);
+
+  fExpenseField.style.display = isIncome ? 'none' : 'block';
+  fIncomeField.style.display = isIncome ? 'block' : 'none';
+  fNameField.style.display = isIncome ? 'block' : 'none';
+  fPaidByField.style.display = isIncome ? 'block' : 'none';
+  fExpensePaymentField.style.display = isIncome ? 'none' : 'block';
+  fExpenseTypeField.style.display = isIncome ? 'none' : 'block';
+  fExpenseBikeToggleField.style.display = isIncome ? 'none' : 'block';
+
+  if (isIncome) {
+    modalTitle.textContent = entry ? 'Edit Income' : 'Add Income';
+    fIncome.value = entry ? (entry.income || '') : '';
+    fName.value = entry ? (entry.name || '') : '';
+    setSelectValueCI(fPaidBy, entry ? entry.paidBy : '');
+  } else {
+    modalTitle.textContent = entry ? 'Edit Expense' : 'Add Expense';
+    fExpense.value = entry ? (entry.expense || '') : '';
+    setSelectValueCI(fExpensePayment, entry ? entry.payment : '');
+    fExpenseType.value = (entry && entry.type) ? entry.type : 'business';
+
+    const splits = (entry && entry.bikeSplits) || [];
+    fExpenseBikeToggle.checked = splits.length > 0;
+    fExpenseBikeSplitsField.style.display = splits.length > 0 ? 'block' : 'none';
+    bikeSplitRows.innerHTML = '';
+    if (splits.length) {
+      splits.forEach(s => addBikeSplitRow(s.bike, s.amount));
+    }
+    // No placeholder row created here when there are no existing splits --
+    // the checkbox's own 'change' handler below creates the first row
+    // lazily, the moment it's actually ticked, so it can seed that row's
+    // amount from whatever's in the main Amount field right then.
+  }
+  fDate.value = entry ? dmyToIso(entry.date) : todayIso();
+  fAmount.value = (entry && typeof entry.amount === 'number') ? entry.amount : '';
+
+  // Delete only makes sense for an entry that already exists on the sheet.
+  modalDeleteBtn.style.display = entry ? 'block' : 'none';
+
+  hideCashDisambiguation();
+  modalBackdrop.classList.add('show');
+}
+
+function openExpenseModal(entry) { openModal(entry ? 'editExpense' : 'addExpense', false, entry); }
+function openIncomeModal(entry) { openModal(entry ? 'editIncome' : 'addIncome', true, entry); }
+
+function closeModal() {
+  modalBackdrop.classList.remove('show');
+  pendingPayload = null;
+  hideCashDisambiguation();
+}
+
+document.getElementById('addExpenseBtn').addEventListener('click', () => openExpenseModal(null));
+document.getElementById('addIncomeBtn').addEventListener('click', () => openIncomeModal(null));
+document.getElementById('addExpenseBtnTop').addEventListener('click', () => openExpenseModal(null));
+document.getElementById('addIncomeBtnTop').addEventListener('click', () => openIncomeModal(null));
+document.getElementById('modalCancelBtn').addEventListener('click', closeModal);
+fExpenseBikeToggle.addEventListener('change', () => {
+  fExpenseBikeSplitsField.style.display = fExpenseBikeToggle.checked ? 'block' : 'none';
+  if (fExpenseBikeToggle.checked && !bikeSplitRows.querySelector('.bike-split-row')) {
+    // Default the first row's amount to whatever's already in the main
+    // Amount field above -- a natural starting point to split down from,
+    // rather than making them retype the same number.
+    addBikeSplitRow('', fAmount.value || '');
+  }
+});
+// Close only on a genuine click on the backdrop itself -- NOT when the
+// mousedown started inside the modal (e.g. dragging to select text in an
+// amount field) and the drag happens to end with the mouse released over
+// the backdrop. Without this check, selecting an input's text by dragging
+// out past the modal's edge would fire a "click" on the backdrop and
+// close the whole modal mid-edit.
+let modalMouseDownOnBackdrop = false;
+modalBackdrop.addEventListener('mousedown', (e) => {
+  modalMouseDownOnBackdrop = (e.target === modalBackdrop);
+});
+modalBackdrop.addEventListener('click', (e) => {
+  if (e.target === modalBackdrop && modalMouseDownOnBackdrop) closeModal();
+  modalMouseDownOnBackdrop = false;
+});
+
+// Shows a list of candidate "cash" sheet rows the server couldn't tell
+// apart on its own (e.g. an old entry with no stored link, and more than
+// one row matches its description + amount). Nothing has been written yet
+// at this point -- picking one resubmits the same payload with
+// cashRowChoice set, so the server can finish the save/delete using
+// exactly that row.
+function showCashDisambiguation(candidates, payload) {
+  pendingPayload = payload;
+  cashDisambigList.innerHTML = candidates.map((c) => {
+    const amt = typeof c.amount === 'number'
+      ? c.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : (c.amount || '—');
+    return `<button type="button" class="disambig-option" data-row="${c.row}">${c.date || '—'} — ${c.text || '—'} — ฿${amt}</button>`;
+  }).join('');
+  cashDisambigList.querySelectorAll('.disambig-option').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      pendingPayload.cashRowChoice = Number(btn.dataset.row);
+      hideCashDisambiguation();
+      runPendingPayload();
+    });
+  });
+  modalFields.style.display = 'none';
+  cashDisambigPanel.style.display = 'block';
+}
+
+function hideCashDisambiguation() {
+  cashDisambigPanel.style.display = 'none';
+  modalFields.style.display = 'block';
+}
+
+cashDisambigCancelBtn.addEventListener('click', () => {
+  pendingPayload = null;
+  hideCashDisambiguation();
+});
+
+// Adds or updates one entry in the already-loaded currentExpenses/
+// currentIncome arrays and re-renders just that list -- used after a
+// successful Add/Edit so it doesn't have to wait on a full reload from the
+// sheet. Safe because editing never shifts rows, and a plain append also
+// doesn't shift anything (the one case that does -- a row inserted above
+// the totals block -- is flagged by the server as res.shifted, and that
+// case falls back to a full reload instead of calling this).
+function upsertLocalExpense(entry) {
+  const idx = currentExpenses.findIndex(e => e.row === entry.row);
+  if (idx === -1) currentExpenses.push(entry); else currentExpenses[idx] = entry;
+  renderExpenses(currentExpenses);
+}
+function upsertLocalIncome(entry) {
+  const idx = currentIncome.findIndex(e => e.row === entry.row);
+  if (idx === -1) currentIncome.push(entry); else currentIncome[idx] = entry;
+  renderIncome(currentIncome);
+}
+
+// Shared by both Save and Delete -- posts whatever's in pendingPayload, and
+// either finishes normally, shows an error, or (if the server couldn't
+// uniquely match a "cash" sheet row) shows the disambiguation picker above
+// and waits for the user to choose before resubmitting.
+async function runPendingPayload() {
+  if (!pendingPayload) return;
+  const payload = pendingPayload;
+  const isDelete = payload.action === 'deleteIncome' || payload.action === 'deleteExpense';
+  const busyBtn = isDelete ? modalDeleteBtn : modalSaveBtn;
+
+  busyBtn.disabled = true;
+  setModalError(null);
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }).then(r => r.json());
+
+    if (res.needsDisambiguation) {
+      showCashDisambiguation(res.candidates, payload);
+      return;
+    }
+    if (!res.success) {
+      setModalError(res.error || (isDelete ? 'Delete failed — please try again.' : 'Save failed — please try again.'));
+      return;
+    }
+    pendingPayload = null;
+    closeModal();
+
+    // Deletes always reload the month (rows shift, and deletes are rare
+    // enough that correctness beats speed here). Add/Edit update the
+    // on-page list directly from what was just saved -- unless the server
+    // flagged a rare row-insert shift, in which case a full reload is the
+    // only safe option.
+    if (isDelete || res.shifted) {
+      loadMonth(Number(monthSelect.value));
+    } else if (payload.action === 'addExpense' || payload.action === 'editExpense') {
+      upsertLocalExpense({
+        row: res.row,
+        date: isoToDmy(payload.date),
+        expense: payload.expense,
+        amount: payload.amount === '' ? '' : Number(payload.amount),
+        payment: payload.payment,
+        type: payload.expenseType,
+        bikeSplits: payload.expenseBikeSplits
+      });
+    } else if (payload.action === 'addIncome' || payload.action === 'editIncome') {
+      upsertLocalIncome({
+        row: res.row,
+        date: isoToDmy(payload.date),
+        income: payload.income,
+        name: payload.name,
+        amount: payload.amount === '' ? '' : Number(payload.amount),
+        paidBy: payload.paidBy
+      });
+    }
+
+    if (res.warning) {
+      alert((isDelete ? 'Deleted, but: ' : 'Saved, but: ') + res.warning);
+    }
+  } catch (err) {
+    setModalError((isDelete ? 'Delete failed: ' : 'Save failed: ') + err.message);
+  } finally {
+    busyBtn.disabled = false;
+  }
+}
+
+modalSaveBtn.addEventListener('click', () => {
+  const isIncome = modalMode === 'addIncome' || modalMode === 'editIncome';
+  const isEdit = modalMode === 'editExpense' || modalMode === 'editIncome';
+
+  const payload = {
+    action: modalMode,
+    monthIndex: Number(monthSelect.value),
+    date: fDate.value || ''
+  };
+  if (isEdit) payload.row = modalEditRow;
+
+  if (isIncome) {
+    payload.income = fIncome.value.trim();
+    payload.name = fName.value.trim();
+    payload.paidBy = fPaidBy.value.trim();
+    if (!payload.income) { setModalError('Please enter an income description.'); return; }
+  } else {
+    payload.expense = fExpense.value.trim();
+    payload.payment = fExpensePayment.value;
+    payload.expenseType = fExpenseType.value;
+    payload.expenseBikeSplits = fExpenseBikeToggle.checked ? collectBikeSplits() : [];
+    if (!payload.expense) { setModalError('Please enter an expense description.'); return; }
+  }
+  payload.amount = fAmount.value === '' ? '' : Number(fAmount.value);
+  if (fAmount.value !== '' && isNaN(payload.amount)) { setModalError('Amount must be a number.'); return; }
+
+  pendingPayload = payload;
+  runPendingPayload();
+});
+
+modalDeleteBtn.addEventListener('click', () => {
+  const isIncome = modalMode === 'editIncome';
+  const label = isIncome ? (fIncome.value.trim() || 'this income entry') : (fExpense.value.trim() || 'this expense');
+  if (!confirm('Delete ' + label + '? This also reverses anything it logged on the "cash" sheet or a Wise/Revolut deposit total. This can\'t be undone.')) {
+    return;
+  }
+
+  pendingPayload = {
+    action: isIncome ? 'deleteIncome' : 'deleteExpense',
+    monthIndex: Number(monthSelect.value),
+    row: modalEditRow
+  };
+  runPendingPayload();
+});
+
+// Default to the current month.
+loadMonth(new Date().getMonth());
+</script>
+
+
+<script>
+/* ---- Date-in-words labels (shared across all pages) ----
+   Every <input type="date"> gets a small red label right after it that
+   writes the selected date out in words -- e.g. "8 July 2026" -- so a
+   date like 08/07 can never be misread as August 7 (American style).
+   You still pick the date in the box exactly as before; this only
+   changes what's DISPLAYED, never what's saved to the sheet.
+   Handles date boxes created later (e.g. the Return picker on Bikes
+   Status) via a DOM observer, and values set by code (prefills,
+   defaults) via a light polling loop. */
+(function () {
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function dateWords(iso) {
+    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(iso || '');
+    if (!m) return '';
+    var monthIdx = parseInt(m[2], 10) - 1;
+    if (monthIdx < 0 || monthIdx > 11) return '';
+    return parseInt(m[3], 10) + ' ' + MONTHS[monthIdx] + ' ' + parseInt(m[1], 10);
+  }
+
+  function ensureLabel(inp) {
+    var el = inp.__dateWordsEl;
+    if (el && el.parentNode) return el;
+    el = document.createElement('span');
+    el.className = 'date-words-label';
+    el.style.cssText = 'display:inline-block;font-size:12.5px;font-weight:700;' +
+      'color:#C62828;margin-top:3px;margin-left:2px;line-height:1.25;white-space:nowrap;';
+    if (inp.nextSibling) {
+      inp.parentNode.insertBefore(el, inp.nextSibling);
+    } else {
+      inp.parentNode.appendChild(el);
+    }
+    inp.__dateWordsEl = el;
+    return el;
+  }
+
+  function refreshDateWordLabels() {
+    var inputs = document.querySelectorAll('input[type="date"]');
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      if (!inp.parentNode) continue;
+      var el = ensureLabel(inp);
+      var text = dateWords(inp.value);
+      if (el.textContent !== text) el.textContent = text;
+    }
+  }
+
+  // React immediately when the user picks/types a date.
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+
+  // Catch date boxes that get created after page load (re-rendered lists,
+  // pop-up pickers). refreshDateWordLabels is idempotent, so the observer
+  // re-firing on its own label insertions settles immediately.
+  if (window.MutationObserver) {
+    new MutationObserver(refreshDateWordLabels)
+      .observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  // Catch values set by code (defaults, prefills from other pages), which
+  // fire no events. A few date boxes at 2 checks/second costs nothing.
+  setInterval(refreshDateWordLabels, 500);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshDateWordLabels);
+  } else {
+    refreshDateWordLabels();
+  }
+})();
+</script>
+
+</body>
+</html>

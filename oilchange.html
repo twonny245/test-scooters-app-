@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oil Change — Priority List</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sand:#F5EFE6;
+    --ink:#1A2421;
+    --petrol:#0F3D3E;
+    --petrol-light:#175A5B;
+    --cone:#FF6B35;
+    --card:#FFFFFF;
+    --line:#DED4C2;
+    --muted:#5A6663;
+    --high:#C53030;
+    --monitor:#B7791F;
+    --ok:#2F855A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--sand); color:var(--ink);
+    font-family:'Inter',sans-serif; min-height:100vh;
+  }
+  .topbar{
+    background:var(--petrol); padding:14px 16px; display:flex;
+    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .topbar .brand{ display:flex; align-items:center; gap:8px; text-decoration:none; }
+  .topbar .brand img{ width:28px; height:28px; object-fit:contain; }
+  .topbar .brand span{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
+    color:#fff; letter-spacing:.02em;
+  }
+  .topbar nav{ display:flex; gap:16px; flex-wrap:wrap; }
+  .topbar nav a{
+    color:#CFE3E0; text-decoration:none; font-size:12.5px; font-weight:500;
+    padding:3px 0; border-bottom:2px solid transparent;
+  }
+  .topbar nav a:hover{ color:#fff; }
+  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
+  .page-head{ max-width:520px; margin:0 auto; padding:22px 16px 4px; }
+  .page-head h1{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
+    color:var(--petrol); margin:0;
+  }
+  .page-head .sub{ color:var(--muted); font-size:13px; margin-top:6px; }
+
+  .tabs{ display:flex; gap:8px; max-width:520px; margin:0 auto; padding:14px 16px 0; }
+  .tab-btn{
+    flex:1; border:1px solid var(--line); background:#fff; color:var(--petrol);
+    padding:11px; font-size:13.5px; letter-spacing:.06em; text-transform:uppercase;
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; border-radius:10px;
+    cursor:pointer;
+  }
+  .tab-btn.active{ background:var(--petrol); color:#fff; border-color:var(--petrol); }
+
+  main{ max-width:520px; margin:0 auto; padding:16px 16px 60px; }
+
+  .search-wrap{ position:relative; margin-bottom:12px; }
+  .search-wrap input{
+    width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:10px;
+    font-size:15px; font-family:'Inter',sans-serif; background:#fff; color:var(--ink);
+  }
+  .search-wrap input:focus{ outline:none; border-color:var(--petrol-light); }
+  .ac-list{
+    position:absolute; left:0; right:0; top:100%;
+    background:#fff; border:1px solid var(--line); border-top:none;
+    border-radius:0 0 9px 9px;
+    max-height:220px; overflow-y:auto;
+    z-index:20; display:none;
+    box-shadow:0 8px 18px rgba(15,61,62,.1);
+  }
+  .ac-list.show{ display:block; }
+  .ac-item{
+    padding:10px 12px; font-size:14px; cursor:pointer;
+    border-bottom:1px solid #F0EBE0;
+  }
+  .ac-item:last-child{ border-bottom:none; }
+  .ac-item:hover, .ac-item.hi{ background:#F5EFE6; }
+  .ac-item mark{ background:#FFE3D2; color:var(--ink); border-radius:2px; }
+
+  .load-status{
+    font-size:12px; color:#B36A2E; background:#FFF3E6; border:1px solid #F3D9B8;
+    border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none;
+  }
+  .load-status.show{ display:block; }
+
+  .list-note{
+    font-size:12px; color:#7A8A86; margin:4px 2px 12px;
+    font-family:'Barlow Condensed',sans-serif; letter-spacing:.06em; text-transform:uppercase;
+  }
+
+  .bike-card{
+    display:block; text-decoration:none; color:inherit;
+    background:var(--card); border:1px solid var(--line); border-left:5px solid var(--line);
+    border-radius:10px; padding:12px 14px; margin-bottom:10px;
+    transition:transform .1s, box-shadow .12s;
+  }
+  .bike-card:active{ transform:scale(.99); }
+  .bike-card.risk-high{ border-left-color:var(--high); }
+  .bike-card.risk-monitor{ border-left-color:var(--monitor); }
+  .bike-card.risk-ok{ border-left-color:var(--ok); }
+
+  .bc-top{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+  .bc-name{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:17px; color:var(--petrol);
+  }
+  .bc-metric{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px; white-space:nowrap;
+  }
+  .bc-metric.risk-high{ color:var(--high); }
+  .bc-metric.risk-monitor{ color:var(--monitor); }
+  .bc-metric.risk-ok{ color:var(--ok); }
+  .bc-renter{
+    font-size:12.5px; color:var(--petrol); margin-top:6px;
+    background:#EEF5F2; border:1px solid #D8E8E1; border-radius:7px;
+    padding:5px 9px; display:inline-block;
+  }
+  .bc-renter b{ font-weight:700; }
+  .bc-details{ font-size:12px; color:var(--muted); margin-top:6px; line-height:1.5; }
+  .bc-details b{ color:var(--ink); font-weight:600; }
+
+  .no-data-section{ margin-top:22px; }
+  .empty-hint{ font-size:13px; color:#8A948F; padding:14px 2px; text-align:center; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="index.html">
+    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
+    <span>AA Scooter Rental</span>
+  </a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="customers.html">Customer Record</a>
+    <a href="pricing.html">Price Calculator</a>
+    <a href="parts.html">Parts &amp; Oil</a>
+    <a href="oilchange.html" class="active">Oil Change</a>
+    <a href="bikes.html">Bikes Status</a>
+    <a href="bikephotos.html">Bike Photos</a>
+    <a href="available-bikes.html">Available Bikes</a>
+    <a href="accounts.html">Accounts</a>
+  </nav>
+</div>
+
+<div class="page-head">
+  <h1>Oil Change</h1>
+  <div class="sub">Bikes ranked by how soon they need an oil change</div>
+</div>
+
+<div class="tabs">
+  <button type="button" class="tab-btn active" id="tabKm">Kilometers</button>
+  <button type="button" class="tab-btn" id="tabDate">Date</button>
+</div>
+
+<main>
+  <div class="search-wrap field">
+    <input type="text" id="bikeSearch" placeholder="Search bikes… e.g. GT, Aerox" autocomplete="off">
+    <div class="ac-list" id="bikeAcList"></div>
+  </div>
+
+  <div class="load-status" id="loadStatus">Loading bikes…</div>
+  <div class="load-status" id="rentalStatus"></div>
+  <div class="list-note" id="listNote"></div>
+  <div id="listBox"></div>
+  <div class="no-data-section" id="noDataSection"></div>
+</main>
+
+<script>
+const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
+
+let partsData = null;
+let customerRows = null;
+let activeTab = 'km';
+let searchBikeNames = [];
+
+function setLoadStatus(msg) {
+  const el = document.getElementById('loadStatus');
+  if (!msg) { el.classList.remove('show'); return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function setRentalStatus(msg) {
+  const el = document.getElementById('rentalStatus');
+  if (!msg) { el.classList.remove('show'); return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function loadParts() {
+  setLoadStatus('Loading bikes…');
+  return Promise.all([
+    fetch(scriptUrl + '?action=parts').then(res => res.json()),
+    fetch(scriptUrl).then(res => res.json()).catch(err => ({ success: false, error: err.message }))
+  ])
+    .then(([partsResult, customerResult]) => {
+      if (!partsResult.success) throw new Error(partsResult.error || 'Could not load data');
+      partsData = partsResult;
+      const bikeHeader = partsData.headers[0];
+      searchBikeNames = partsData.rows
+        .map(r => (r[bikeHeader] || '').toString().trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      if (customerResult && customerResult.success) {
+        customerRows = customerResult.rows;
+        setRentalStatus(null);
+      } else {
+        customerRows = [];
+        setRentalStatus('Rental info unavailable (' + (customerResult && customerResult.error ? customerResult.error : 'unknown error') + ') — bikes will show without "Rented to".');
+      }
+      setLoadStatus(null);
+      render();
+    })
+    .catch(err => {
+      setLoadStatus('Could not load bikes: ' + err.message);
+    });
+}
+
+// Parse dates in the dd/MM/yyyy format the sheet returns (falls back to
+// whatever the JS Date constructor can make sense of).
+function parseFlexibleDate(str) {
+  if (!str) return null;
+  str = String(str).trim();
+  var slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashMatch) {
+    var d = parseInt(slashMatch[1], 10), m = parseInt(slashMatch[2], 10) - 1, y = parseInt(slashMatch[3], 10);
+    var dt = new Date(y, m, d);
+    if (!isNaN(dt.getTime())) return dt;
+  }
+  var dt2 = new Date(str);
+  if (!isNaN(dt2.getTime())) return dt2;
+  return null;
+}
+
+// Strips things like "(155)" and punctuation, collapses whitespace, and
+// lowercases — so "Aerox White (155)" and "aerox white" line up.
+function normalizeBikeName(s) {
+  return (s || '').toString()
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+// Words/numerals used to tell apart otherwise-identical bike names that are
+// actually different bikes — e.g. "Gran Filano" and "Gran Filano Two" are
+// two separate bikes, not a loose match of the same one.
+const DISTINGUISHING_SUFFIXES = new Set([
+  'one','two','three','four','five','six','seven','eight','nine','ten',
+  'i','ii','iii','iv','v','vi','vii','viii','ix','x',
+  '1','2','3','4','5','6','7','8','9','10'
+]);
+
+// True if the two (normalized) names are the same bike, allowing for one
+// being a shorter/longer version of the other (e.g. missing the cc suffix,
+// or a couple of extra/missing words) — since the Customer Record bike
+// field is free text and won't always exactly match the Parts sheet. The
+// exception is a trailing distinguishing number/ordinal ("Two", "II", "2"),
+// which marks a genuinely different bike rather than a looser match.
+function bikeNamesMatch(a, b) {
+  const na = normalizeBikeName(a);
+  const nb = normalizeBikeName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+
+  const ta = na.split(' ');
+  const tb = nb.split(' ');
+  const shorter = ta.length <= tb.length ? ta : tb;
+  const longer = ta.length <= tb.length ? tb : ta;
+
+  const isPrefix = shorter.every((tok, i) => tok === longer[i]);
+  if (isPrefix) {
+    const extra = longer.slice(shorter.length);
+    if (extra.some(t => DISTINGUISHING_SUFFIXES.has(t))) return false;
+    return true;
+  }
+
+  return na.includes(nb) || nb.includes(na);
+}
+
+// Finds the customer record currently holding this bike: same bike model,
+// with a return date of today or later. The same bike can have several old,
+// already-returned rows earlier in the sheet — if more than one row still
+// qualifies, the one lowest down / most recently entered in the sheet wins,
+// since that's the actual current booking (more reliable than trusting a
+// possibly mistyped "renting date from" for the tiebreak).
+function findCurrentRenter(bikeName) {
+  if (!customerRows || !customerRows.length) return null;
+  if (!normalizeBikeName(bikeName)) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const candidates = customerRows
+    .map((r, sheetIndex) => ({ r, sheetIndex }))
+    .filter(({ r }) => {
+      if (!bikeNamesMatch(r.bikeModel, bikeName)) return false;
+      const ret = parseFlexibleDate(r.returnDate);
+      if (!ret) return false;
+      ret.setHours(0, 0, 0, 0);
+      return ret >= today;
+    });
+
+  if (!candidates.length) return null;
+
+  candidates.sort((a, b) => b.sheetIndex - a.sheetIndex);
+
+  return candidates[0].r;
+}
+
+// Case-insensitive, multi-word "contains all tokens" matcher — same rule
+// used on the Bikes Status search box.
+function tokenMatch(value, query) {
+  if (!query) return true;
+  const v = (value || '').toString().toLowerCase();
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return tokens.every(t => v.includes(t));
+}
+
+function highlight(value, query) {
+  let out = String(value || '');
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  tokens.forEach(t => {
+    if (!t) return;
+    const re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
+    out = out.replace(re, '<mark>$1</mark>');
+  });
+  return out;
+}
+
+function parseNum(v) {
+  if (v === undefined || v === null) return NaN;
+  const cleaned = v.toString().replace(/[^0-9.\-]/g, '');
+  if (cleaned === '' || cleaned === '-') return NaN;
+  return parseFloat(cleaned);
+}
+
+function riskClass(status) {
+  const s = (status || '').toString().trim().toUpperCase();
+  if (s === 'HIGH RISK') return 'risk-high';
+  if (s === 'MONITOR') return 'risk-monitor';
+  if (s === 'OK') return 'risk-ok';
+  return '';
+}
+
+// The Operation tab's Status cells have a leading emoji circle (🟢/🟡/🟠)
+// in front of the text — strip anything that isn't a letter or space so
+// we're left with a clean "OK" / "MONITOR" / "HIGH RISK".
+function cleanStatus(status) {
+  return (status || '').toString().replace(/[^A-Za-z ]/g, '').trim().toUpperCase();
+}
+
+// Looks up this bike's Status from the Operation tab (the one kept
+// accurate), using the same fuzzy name matching used for rentals. Returns
+// null if the Operation tab has no matching row, so callers can fall back
+// to the Parts and Oil change tab's own Status column.
+function findOperationStatus(bikeName) {
+  if (!partsData || !partsData.operationRows || !partsData.operationRows.length) return null;
+  if (!normalizeBikeName(bikeName)) return null;
+
+  const match = partsData.operationRows.find(r => bikeNamesMatch(r.bike, bikeName));
+  return match ? cleanStatus(match.status) : null;
+}
+
+function findHeader(headers, name) {
+  return headers.find(h => h.trim().toLowerCase() === name);
+}
+
+// Matches whichever name the "km reading" column currently has in the
+// sheet — old name or the renamed one — so this page keeps working
+// whether or not the header cell has been renamed yet.
+function findKmCheckHeader(headers) {
+  const candidates = ['last kilometers check', 'last km check', 'last oil check'];
+  for (const name of candidates) {
+    const match = headers.find(h => h.trim().toLowerCase().replace(/\s+/g, ' ') === name);
+    if (match) return match;
+  }
+  return null;
+}
+
+// Days between the "date" column (when the km reading was last checked)
+// and today, computed fresh from the raw date string rather than trusting
+// a sheet-computed column -- this is the figure the Date tab now sorts
+// and displays by, and what "Checked: ... (N days ago)" shows on every
+// card regardless of which tab is active. Returns NaN if there's no
+// parseable date to work from.
+function daysSinceChecked(row, headers) {
+  const dateHeader = findHeader(headers, 'date');
+  const d = parseFlexibleDate(row[dateHeader]);
+  if (!d) return NaN;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  d.setHours(0, 0, 0, 0);
+  return Math.round((today - d) / (1000 * 60 * 60 * 24));
+}
+
+function cardHtml(row, headers, metricLabel, metricValue) {
+  const bikeHeader = headers[0];
+  const operationStatus = findOperationStatus(row[bikeHeader]);
+  const status = operationStatus !== null ? operationStatus : (row[findHeader(headers, 'status')] || '');
+  const rClass = riskClass(status);
+  const oilChange = row[findHeader(headers, 'oil change')] || '—';
+  const nextOil = row[findHeader(headers, 'next oil change')] || '—';
+  const lastCheck = row[findKmCheckHeader(headers)] || '—';
+  const checkedDateRaw = row[findHeader(headers, 'date')] || '';
+  const daysSinceCheck = daysSinceChecked(row, headers);
+  const checkedDisplay = checkedDateRaw
+    ? checkedDateRaw + (isNaN(daysSinceCheck) ? '' : ' (' + daysSinceCheck.toLocaleString('en-US') + (daysSinceCheck === 1 ? ' day ago)' : ' days ago)'))
+    : '—';
+
+  const renter = findCurrentRenter(row[bikeHeader]);
+  const renterLine = renter
+    ? `<div class="bc-renter">🧑‍✈️ Rented to: <b>${renter.name || 'Unknown'}</b>${renter.contact ? ' &nbsp;·&nbsp; ' + renter.contact : ''}</div>`
+    : '';
+
+  return `
+    <a class="bike-card ${rClass}" href="parts.html?bike=${encodeURIComponent(row[bikeHeader])}">
+      <div class="bc-top">
+        <div class="bc-name">${row[bikeHeader]}</div>
+        <div class="bc-metric ${rClass}">${metricValue} ${metricLabel}</div>
+      </div>
+      ${renterLine}
+      <div class="bc-details">
+        <b>Status:</b> ${status || '—'} &nbsp; <b>Oil change:</b> ${oilChange}<br>
+        <b>Last kilometers check:</b> ${lastCheck} km &nbsp; <b>Checked:</b> ${checkedDisplay}<br>
+        <b>Next oil change:</b> ${nextOil} km
+      </div>
+    </a>
+  `;
+}
+
+function render() {
+  if (!partsData) return;
+  const headers = partsData.headers;
+  const bikeHeader = headers[0];
+  const listBox = document.getElementById('listBox');
+  const noDataSection = document.getElementById('noDataSection');
+  const listNote = document.getElementById('listNote');
+  const query = document.getElementById('bikeSearch').value.trim();
+
+  const filteredRows = partsData.rows.filter(row => tokenMatch(row[bikeHeader], query));
+
+  if (activeTab === 'km') {
+    const nextH = findHeader(headers, 'next oil change');
+    const lastH = findKmCheckHeader(headers);
+
+    const withData = [];
+    const withoutData = [];
+
+    filteredRows.forEach(row => {
+      const next = parseNum(row[nextH]);
+      const last = parseNum(row[lastH]);
+      if (isNaN(next) || isNaN(last)) {
+        withoutData.push(row);
+      } else {
+        withData.push({ row, gap: next - last });
+      }
+    });
+
+    withData.sort((a, b) => a.gap - b.gap);
+
+    listNote.textContent = 'Soonest due (smallest km remaining) at top';
+    listBox.innerHTML = withData.map(item =>
+      cardHtml(item.row, headers, 'km remaining', item.gap.toLocaleString('en-US'))
+    ).join('');
+
+    noDataSection.innerHTML = withoutData.length
+      ? '<div class="list-note">Missing km data</div>' +
+        withoutData.map(row => cardHtml(row, headers, '', '—')).join('')
+      : '';
+
+  } else {
+    const withData = [];
+    const withoutData = [];
+
+    filteredRows.forEach(row => {
+      const days = daysSinceChecked(row, headers);
+      if (isNaN(days)) {
+        withoutData.push(row);
+      } else {
+        withData.push({ row, days });
+      }
+    });
+
+    withData.sort((a, b) => b.days - a.days);
+
+    listNote.textContent = 'Checked longest ago (most overdue) at top';
+    listBox.innerHTML = withData.map(item =>
+      cardHtml(item.row, headers, 'days since checked', item.days.toLocaleString('en-US'))
+    ).join('');
+
+    noDataSection.innerHTML = withoutData.length
+      ? '<div class="list-note">Missing date data</div>' +
+        withoutData.map(row => cardHtml(row, headers, '', '—')).join('')
+      : '';
+  }
+
+  if (!listBox.innerHTML) {
+    listBox.innerHTML = '<div class="empty-hint">No matching bikes.</div>';
+  }
+}
+
+document.getElementById('tabKm').addEventListener('click', () => {
+  activeTab = 'km';
+  document.getElementById('tabKm').classList.add('active');
+  document.getElementById('tabDate').classList.remove('active');
+  render();
+});
+document.getElementById('tabDate').addEventListener('click', () => {
+  activeTab = 'date';
+  document.getElementById('tabDate').classList.add('active');
+  document.getElementById('tabKm').classList.remove('active');
+  render();
+});
+
+/* ---------------- Search box with live narrowing + autocomplete ---------------- */
+
+const searchInput = document.getElementById('bikeSearch');
+const acList = document.getElementById('bikeAcList');
+let hiIndex = -1;
+
+function closeAc() {
+  acList.classList.remove('show');
+  acList.innerHTML = '';
+  hiIndex = -1;
+}
+
+function openAc(query) {
+  const options = searchBikeNames.filter(n => tokenMatch(n, query)).slice(0, 8);
+  if (!query || options.length === 0) { closeAc(); return; }
+  acList.innerHTML = options.map((v, i) =>
+    `<div class="ac-item" data-index="${i}">${highlight(v, query)}</div>`
+  ).join('');
+  acList.classList.add('show');
+  hiIndex = -1;
+  Array.from(acList.children).forEach((el, i) => {
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      searchInput.value = options[i];
+      closeAc();
+      render();
+    });
+  });
+  acList._options = options;
+}
+
+searchInput.addEventListener('input', () => {
+  openAc(searchInput.value.trim());
+  render();
+});
+
+searchInput.addEventListener('focus', () => {
+  openAc(searchInput.value.trim());
+});
+
+searchInput.addEventListener('keydown', (e) => {
+  const items = Array.from(acList.children);
+  if (e.key === 'Enter') {
+    // Enter just confirms the current text as the filter (list is already
+    // narrowed live) and closes the suggestion dropdown.
+    e.preventDefault();
+    if (hiIndex >= 0 && acList._options) {
+      searchInput.value = acList._options[hiIndex];
+    }
+    closeAc();
+    render();
+    return;
+  }
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    hiIndex = Math.min(hiIndex + 1, items.length - 1);
+    items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    hiIndex = Math.max(hiIndex - 1, 0);
+    items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+  } else if (e.key === 'Escape') {
+    closeAc();
+  }
+});
+
+document.addEventListener('click', (e) => {
+  if (!searchInput.contains(e.target) && !acList.contains(e.target)) closeAc();
+});
+
+loadParts();
+</script>
+
+</body>
+</html>
