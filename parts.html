@@ -750,6 +750,22 @@ async function confirmKmChangeIfNeeded(fields) {
   return showKmWarning(bikeName, oldKm, newKm);
 }
 
+// While a save is in flight, disable every button on the page -- not just
+// the one clicked -- so a double-click (or clicking a different button
+// mid-save) can't fire off a second write. Only re-enables the buttons
+// that were actually enabled before the save started.
+function setAllButtonsDisabled(disabled) {
+  document.querySelectorAll('button').forEach(b => {
+    if (disabled) {
+      if (!b.disabled) b.dataset.reenableAfterSave = '1';
+      b.disabled = true;
+    } else if (b.dataset.reenableAfterSave) {
+      b.disabled = false;
+      delete b.dataset.reenableAfterSave;
+    }
+  });
+}
+
 // Shared POST-and-report routine used by both the quick "Update kilometers"
 // button and the full "Save changes" button — only the set of fields sent
 // and the button/status elements differ.
@@ -759,7 +775,7 @@ async function saveFields(fields, btn, statusBox, idleLabel) {
   const okToProceed = await confirmKmChangeIfNeeded(fields);
   if (!okToProceed) return; // user cancelled -- nothing saved
 
-  btn.disabled = true;
+  setAllButtonsDisabled(true);
   btn.textContent = 'Saving…';
 
   const payload = {
@@ -806,7 +822,7 @@ async function saveFields(fields, btn, statusBox, idleLabel) {
     statusBox.textContent = 'Could not save: ' + err.message;
     statusBox.className = 'status err';
   } finally {
-    btn.disabled = false;
+    setAllButtonsDisabled(false);
     btn.textContent = idleLabel;
   }
 }

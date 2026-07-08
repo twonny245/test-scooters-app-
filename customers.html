@@ -578,6 +578,23 @@ function stopSaveProgress() {
   clearTimeout(saveProgressTimer);
 }
 
+// While a save is in flight, disable every button on the page -- not just
+// the submit button -- so a double-click (or hitting some other button
+// mid-save) can't fire off a second write and create a duplicate customer
+// record. Only re-enables the buttons that were actually enabled before
+// the save started.
+function setAllButtonsDisabled(disabled) {
+  document.querySelectorAll('button').forEach(b => {
+    if (disabled) {
+      if (!b.disabled) b.dataset.reenableAfterSave = '1';
+      b.disabled = true;
+    } else if (b.dataset.reenableAfterSave) {
+      b.disabled = false;
+      delete b.dataset.reenableAfterSave;
+    }
+  });
+}
+
 // Tracks whether the entry currently in the form is a normal walk-in add
 // ("direct") or was auto-populated by the "Extend" flow on Bikes Status
 // ("extend"). Sent to the backend so the monthly/cash sheet rows read
@@ -656,7 +673,7 @@ depositMethod.addEventListener('change', refreshDepositAmountVisibility);
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   statusBox.className = 'status';
-  submitBtn.disabled = true;
+  setAllButtonsDisabled(true);
   submitBtn.textContent = 'Saving…';
 
   const rentingDateFrom = document.getElementById('rentingDateFrom').value;
@@ -666,7 +683,7 @@ form.addEventListener('submit', async (e) => {
   if (totalPrice === '' || totalPrice === null || isNaN(Number(totalPrice))) {
     statusBox.textContent = 'Please enter a total price before saving.';
     statusBox.className = 'status err';
-    submitBtn.disabled = false;
+    setAllButtonsDisabled(false);
     submitBtn.textContent = 'Add to sheet';
     document.getElementById('totalPrice').focus();
     return;
@@ -750,7 +767,7 @@ form.addEventListener('submit', async (e) => {
     statusBox.textContent = 'Could not save: ' + err.message;
     statusBox.className = 'status err';
   } finally {
-    submitBtn.disabled = false;
+    setAllButtonsDisabled(false);
     submitBtn.textContent = 'Add to sheet';
   }
 });

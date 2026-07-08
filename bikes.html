@@ -497,6 +497,24 @@ let openExtendRowNumber = null;   // rowNumber whose inline extend form is showi
 let savingExtendRowNumber = null; // rowNumber currently being saved as extended
 let savingExtendStage = 'connecting'; // 'connecting' | 'saving' -- fake staged progress text on the Confirm button
 
+// While a return/extend save is in flight, disable every button on the
+// page -- not just the row's own Confirm button -- so a double-click (or
+// clicking a different row's button mid-save) can't fire off a second
+// write and create a duplicate entry. Only re-enables the buttons that
+// were actually enabled before the save started; the row's own Confirm/
+// Cancel buttons are separately re-rendered via render()'s isSaving logic.
+function setAllButtonsDisabled(disabled) {
+  document.querySelectorAll('button').forEach(b => {
+    if (disabled) {
+      if (!b.disabled) b.dataset.reenableAfterSave = '1';
+      b.disabled = true;
+    } else if (b.dataset.reenableAfterSave) {
+      b.disabled = false;
+      delete b.dataset.reenableAfterSave;
+    }
+  });
+}
+
 function todayIso() {
   const d = new Date();
   const y = d.getFullYear();
@@ -824,7 +842,8 @@ function confirmReturn(rowNumber, isoDate) {
   savingReturnRowNumber = rowNumber;
   savingReturnStage = 'connecting';
   render();
-  const stageTimer = setTimeout(() => { savingReturnStage = 'saving'; render(); }, 500);
+  setAllButtonsDisabled(true);
+  const stageTimer = setTimeout(() => { savingReturnStage = 'saving'; render(); setAllButtonsDisabled(true); }, 500);
 
   fetch(scriptUrl, {
     method: 'POST',
@@ -834,6 +853,7 @@ function confirmReturn(rowNumber, isoDate) {
     .then(res => res.json())
     .then(result => {
       clearTimeout(stageTimer);
+      setAllButtonsDisabled(false);
       if (!result.success) throw new Error(result.error || 'Could not save.');
       // Post-write verification problems (the server re-reads what it
       // wrote and compares) come back as a warning -- the save DID go
@@ -859,6 +879,7 @@ function confirmReturn(rowNumber, isoDate) {
     })
     .catch(err => {
       clearTimeout(stageTimer);
+      setAllButtonsDisabled(false);
       savingReturnRowNumber = null;
       render();
       alert('Could not mark as returned: ' + err.message);
@@ -926,7 +947,8 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
     savingExtendRowNumber = rowNumber;
     savingExtendStage = 'connecting';
     render();
-    const closeStageTimer = setTimeout(() => { savingExtendStage = 'saving'; render(); }, 500);
+    setAllButtonsDisabled(true);
+    const closeStageTimer = setTimeout(() => { savingExtendStage = 'saving'; render(); setAllButtonsDisabled(true); }, 500);
 
     fetch(scriptUrl, {
       method: 'POST',
@@ -936,6 +958,7 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
       .then(res => res.json())
       .then(result => {
         clearTimeout(closeStageTimer);
+        setAllButtonsDisabled(false);
         if (!result.success) throw new Error(result.error || 'Could not close out the old booking.');
         // Post-write verification problems come back as a warning -- the
         // close-out DID go through, but something should be checked by hand.
@@ -958,6 +981,7 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
       })
       .catch(err => {
         clearTimeout(closeStageTimer);
+        setAllButtonsDisabled(false);
         savingExtendRowNumber = null;
         render();
         alert('Could not extend: ' + err.message);
@@ -970,7 +994,8 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
   savingExtendRowNumber = rowNumber;
   savingExtendStage = 'connecting';
   render();
-  const stageTimer = setTimeout(() => { savingExtendStage = 'saving'; render(); }, 500);
+  setAllButtonsDisabled(true);
+  const stageTimer = setTimeout(() => { savingExtendStage = 'saving'; render(); setAllButtonsDisabled(true); }, 500);
 
   fetch(scriptUrl, {
     method: 'POST',
@@ -980,6 +1005,7 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
     .then(res => res.json())
     .then(result => {
       clearTimeout(stageTimer);
+      setAllButtonsDisabled(false);
       if (!result.success) throw new Error(result.error || 'Could not save.');
       // Post-write verification problems (the server re-reads everything
       // it wrote -- customer row, income row, cash row, bikes/deposit
@@ -992,6 +1018,7 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
     })
     .catch(err => {
       clearTimeout(stageTimer);
+      setAllButtonsDisabled(false);
       savingExtendRowNumber = null;
       render();
       alert('Could not extend: ' + err.message);

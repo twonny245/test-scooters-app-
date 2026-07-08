@@ -307,6 +307,23 @@ const progressCount = document.getElementById('progressCount');
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightboxImg');
 const lightboxClose = document.getElementById('lightboxClose');
+
+// While an upload/delete is in flight, disable every button on the page
+// -- not just the one clicked -- so a double-click (or clicking a
+// different photo's delete button mid-request) can't fire off a second
+// write. Only re-enables the buttons that were actually enabled before
+// the request started.
+function setAllButtonsDisabled(disabled) {
+  document.querySelectorAll('button').forEach(b => {
+    if (disabled) {
+      if (!b.disabled) b.dataset.reenableAfterSave = '1';
+      b.disabled = true;
+    } else if (b.dataset.reenableAfterSave) {
+      b.disabled = false;
+      delete b.dataset.reenableAfterSave;
+    }
+  });
+}
 const coveragePanel = document.getElementById('coveragePanel');
 
 function openLightbox(url) {
@@ -484,7 +501,7 @@ function attachDeleteHandlers() {
       if (!confirm('Delete this photo? This cannot be undone from here.')) return;
       const card = btn.closest('.photo-card');
       card.style.opacity = '0.4';
-      btn.disabled = true;
+      setAllButtonsDisabled(true);
       btn.innerHTML = '<span class="del-spinner"></span>';
       fetch(scriptUrl, {
         method: 'POST',
@@ -493,6 +510,7 @@ function attachDeleteHandlers() {
       })
         .then(res => res.json())
         .then(data => {
+          setAllButtonsDisabled(false);
           if (!data.success) throw new Error(data.error || 'Could not delete');
           card.remove();
           if (!gallery.querySelector('.photo-card')) {
@@ -500,6 +518,7 @@ function attachDeleteHandlers() {
           }
         })
         .catch(err => {
+          setAllButtonsDisabled(false);
           alert('Could not delete: ' + err.message);
           card.style.opacity = '1';
           btn.disabled = false;
@@ -543,6 +562,7 @@ photoInput.addEventListener('change', async () => {
 
   uploadStatus.className = 'upload-status pending show';
   uploadStatus.textContent = 'Uploading ' + files.length + (files.length === 1 ? ' photo…' : ' photos…');
+  setAllButtonsDisabled(true);
 
   progressWrap.classList.add('show');
   progressLabel.textContent = 'Uploading…';
@@ -576,6 +596,7 @@ photoInput.addEventListener('change', async () => {
   attachDeleteHandlers();
   photoInput.value = '';
   progressWrap.classList.remove('show');
+  setAllButtonsDisabled(false);
 
   if (firstError && successCount === 0) {
     uploadStatus.className = 'upload-status err show';

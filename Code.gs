@@ -1458,6 +1458,9 @@ function doGet(e) {
     if (e.parameter.action === 'accounts') {
       return getAccountsData(e.parameter.month);
     }
+    if (e.parameter.action === 'deposits') {
+      return getDepositsData();
+    }
     if (e.parameter.action === 'bikesList') {
       return getBikesListNames();
     }
@@ -1971,6 +1974,119 @@ function getAccountsData(monthIndexRaw) {
         sheetName: sheet.getName(),
         expenses: expenses,
         income: income
+      }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- Reads the security-deposit tables (see logSecurityDeposit above)
+// on the CURRENT month's sheet only, for the Deposits page. Older months'
+// sheets keep their own deposit tables too, but those are closed-out
+// history (kept for record-keeping only) -- new deposits only ever get
+// logged onto whichever sheet matches today's month, so that's the only
+// one this reads. Each month sheet has three growing lists in fixed
+// columns:
+//   Scan (shown as "Bank")  -> O date, P amount, Q name -- header "deposit scan" in O1
+//   Wise                    -> R date, S amount, T name -- header "deposit wise" in R1
+//   Revolut                 -> V date, W amount, X name -- header "deposit revolut" in V1
+//
+// For each category, this first checks that the header cell still says
+// what's expected -- if it doesn't (column moved, sheet edited by hand,
+// etc.), that section is skipped and a warning is added to the response
+// instead of silently reading the wrong column. Otherwise it reads down
+// from row 2, skipping fully-blank gap rows, and stops the moment it hits
+// a row whose date cell says "total" (that row itself is never included
+// -- it's the sheet's own running-total row).
+//
+// Rows are returned top-to-bottom, exactly as they appear in the sheet.
+// Since logSecurityDeposit always appends new entries into the first free
+// row from the top, that top-to-bottom order is already oldest-to-newest
+// -- which also sidesteps having to parse the free-text date cells
+// themselves (they're entered by hand and mix formats like "8 July",
+// "26/07" and "11 Jun", none of which carry a year).
+function getDepositsData() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var tz = ss.getSpreadsheetTimeZone();
+
+    var CATEGORIES = [
+      { key: 'bank', label: 'Bank', header: 'deposit scan', dateCol: 15, amountCol: 16, nameCol: 17 },    // O, P, Q
+      { key: 'wise', label: 'Wise', header: 'deposit wise', dateCol: 18, amountCol: 19, nameCol: 20 },     // R, S, T
+      { key: 'revolut', label: 'Revolut', header: 'deposit revolut', dateCol: 22, amountCol: 23, nameCol: 24 } // V, W, X
+    ];
+
+    function norm(s) { return (s || '').toString().trim().toLowerCase(); }
+    function cellToString(val) {
+      if (val instanceof Date) return Utilities.formatDate(val, tz, 'dd/MM/yyyy');
+      return (val !== undefined && val !== null) ? val.toString() : '';
+    }
+
+    var currentMonthIndex = Number(Utilities.formatDate(new Date(), tz, 'M')) - 1;
+    var monthName = ACCOUNTS_MONTH_NAMES[currentMonthIndex];
+    var sheet = findMonthSheetFuzzy(ss, monthName);
+    if (!sheet) {
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          success: false,
+          error: 'No sheet found matching "' + monthName + '" -- could not load this month\'s deposits.'
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var deposits = [];
+    var warnings = [];
+
+    CATEGORIES.forEach(function(cat) {
+      var headerCell = sheet.getRange(1, cat.dateCol);
+      var headerRaw = headerCell.getValue();
+      if (norm(headerRaw) !== cat.header) {
+        warnings.push('"' + sheet.getName() + '" sheet: expected "' + cat.header + '" in cell ' +
+          columnToLetter(cat.dateCol) + '1 but found "' + (headerRaw || '(blank)') +
+          '" -- skipped this section, please go have a look.');
+        return;
+      }
+
+      var maxRow = sheet.getMaxRows();
+      var rowsToScan = maxRow - 1; // starting at row 2
+      if (rowsToScan < 1) return;
+      var dateVals = sheet.getRange(2, cat.dateCol, rowsToScan, 1).getValues();
+      var amtVals = sheet.getRange(2, cat.amountCol, rowsToScan, 1).getValues();
+      var nameVals = sheet.getRange(2, cat.nameCol, rowsToScan, 1).getValues();
+
+      var rowsFound = [];
+      for (var i = 0; i < dateVals.length; i++) {
+        var dateRaw = dateVals[i][0];
+        if (norm(dateRaw) === 'total') break; // end of this block -- don't include the totals row.
+
+        var dateEmpty = (dateRaw === '' || dateRaw === null);
+        var amtEmpty = (amtVals[i][0] === '' || amtVals[i][0] === null);
+        var nameEmpty = (nameVals[i][0] === '' || nameVals[i][0] === null);
+        if (dateEmpty && amtEmpty && nameEmpty) continue; // gap row -- skip, keep scanning down.
+
+        rowsFound.push({
+          category: cat.key,
+          categoryLabel: cat.label,
+          date: cellToString(dateRaw),
+          amount: (amtVals[i][0] === '' || amtVals[i][0] === null || isNaN(Number(amtVals[i][0]))) ? '' : Number(amtVals[i][0]),
+          name: (nameVals[i][0] || '').toString().trim()
+        });
+      }
+      deposits = deposits.concat(rowsFound);
+    });
+
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        success: true,
+        monthIndex: currentMonthIndex,
+        month: monthName,
+        sheetName: sheet.getName(),
+        deposits: deposits,
+        warnings: warnings
       }))
       .setMimeType(ContentService.MimeType.JSON);
 

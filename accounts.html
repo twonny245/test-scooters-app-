@@ -43,11 +43,22 @@
   .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
 
   .page-head{ max-width:960px; margin:0 auto; padding:22px 16px 4px; }
+  .page-head-top{
+    display:flex; align-items:flex-start; justify-content:space-between;
+    gap:12px; flex-wrap:wrap;
+  }
   .page-head h1{
     font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
     color:var(--petrol); margin:0;
   }
   .page-head .sub{ color:var(--muted); font-size:13px; margin-top:6px; line-height:1.5; }
+  .btn-deposits{
+    flex-shrink:0; display:inline-block; background:var(--cone); color:#fff;
+    text-decoration:none; font-family:'Barlow Condensed',sans-serif; font-weight:700;
+    font-size:13px; letter-spacing:.03em; text-transform:uppercase;
+    padding:11px 18px; border-radius:10px; white-space:nowrap;
+  }
+  .btn-deposits:active{ transform:scale(.97); }
 
   main{ max-width:960px; margin:0 auto; padding:16px 16px 60px; }
 
@@ -249,12 +260,18 @@
     <a href="bikephotos.html">Bike Photos</a>
     <a href="available-bikes.html">Available Bikes</a>
     <a href="accounts.html" class="active">Accounts</a>
+    <a href="deposits.html">Deposits</a>
   </nav>
 </div>
 
 <div class="page-head">
-  <h1>Accounts</h1>
-  <div class="sub">Expenses and income for the selected month.</div>
+  <div class="page-head-top">
+    <div>
+      <h1>Accounts</h1>
+      <div class="sub">Expenses and income for the selected month.</div>
+    </div>
+    <a class="btn-deposits" href="deposits.html">Deposits</a>
+  </div>
 </div>
 
 <main>
@@ -771,6 +788,24 @@ function stopSaveProgress() {
   modalProgress.classList.remove('show');
 }
 
+// While a save/delete is in flight, disable every button on the page --
+// not just the one clicked -- so a double-click (or clicking a different
+// button mid-save) can't fire off a second write and create a duplicate
+// entry. Only re-enables the buttons that were actually enabled before
+// the save started, so anything legitimately disabled for other reasons
+// stays disabled afterwards.
+function setAllButtonsDisabled(disabled) {
+  document.querySelectorAll('button').forEach(b => {
+    if (disabled) {
+      if (!b.disabled) b.dataset.reenableAfterSave = '1';
+      b.disabled = true;
+    } else if (b.dataset.reenableAfterSave) {
+      b.disabled = false;
+      delete b.dataset.reenableAfterSave;
+    }
+  });
+}
+
 // Selects the option matching rawValue, ignoring case/whitespace, so a
 // sheet cell like "cash" still preselects the "Cash" option. Leaves the
 // select on its blank default if nothing matches.
@@ -926,9 +961,8 @@ async function runPendingPayload() {
   if (!pendingPayload) return;
   const payload = pendingPayload;
   const isDelete = payload.action === 'deleteIncome' || payload.action === 'deleteExpense';
-  const busyBtn = isDelete ? modalDeleteBtn : modalSaveBtn;
 
-  busyBtn.disabled = true;
+  setAllButtonsDisabled(true);
   setModalError(null);
   startSaveProgress();
   try {
@@ -984,7 +1018,7 @@ async function runPendingPayload() {
     stopSaveProgress();
     setModalError((isDelete ? 'Delete failed: ' : 'Save failed: ') + err.message);
   } finally {
-    busyBtn.disabled = false;
+    setAllButtonsDisabled(false);
   }
 }
 

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deposits — AA Scooters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sand:#F5EFE6;
+    --ink:#1A2421;
+    --petrol:#0F3D3E;
+    --petrol-light:#175A5B;
+    --cone:#FF6B35;
+    --card:#FFFFFF;
+    --line:#DED4C2;
+    --muted:#5A6663;
+    --ok:#2F855A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--sand); color:var(--ink);
+    font-family:'Inter',sans-serif; min-height:100vh;
+  }
+  .topbar{
+    background:var(--petrol); padding:14px 16px; display:flex;
+    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .topbar .brand{ display:flex; align-items:center; gap:8px; text-decoration:none; }
+  .topbar .brand img{ width:28px; height:28px; object-fit:contain; }
+  .topbar .brand span{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
+    color:#fff; letter-spacing:.02em;
+  }
+  .topbar nav{ display:flex; gap:16px; flex-wrap:wrap; }
+  .topbar nav a{
+    color:#CFE3E0; text-decoration:none; font-size:12.5px; font-weight:500;
+    padding:3px 0; border-bottom:2px solid transparent;
+  }
+  .topbar nav a:hover{ color:#fff; }
+  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
+
+  .page-head{ max-width:720px; margin:0 auto; padding:22px 16px 4px; }
+  .page-head h1{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
+    color:var(--petrol); margin:0;
+  }
+  .page-head .sub{ color:var(--muted); font-size:13px; margin-top:6px; line-height:1.5; }
+
+  main{ max-width:720px; margin:0 auto; padding:16px 16px 60px; }
+
+  .load-status{
+    font-size:12px; color:#B36A2E; background:#FFF3E6; border:1px solid #F3D9B8;
+    border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none;
+  }
+  .load-status.show{ display:block; }
+
+  .total-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--petrol); color:#fff; border-radius:10px;
+    padding:12px 14px; margin-bottom:22px;
+  }
+  .total-bar .l{
+    font-family:'Barlow Condensed',sans-serif; font-size:12.5px; font-weight:600;
+    letter-spacing:.08em; text-transform:uppercase; color:#CFE3E0;
+  }
+  .total-bar .n{ font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:20px; }
+
+  /* One section per category (Bank / Wise / Revolut) */
+  .cat-section{ margin-bottom:26px; }
+  .cat-section:last-child{ margin-bottom:0; }
+  .cat-head{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .cat-head h2{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:18px;
+    color:var(--petrol); margin:0; display:flex; align-items:center; gap:8px;
+  }
+  .cat-head .cat-total{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
+    color:var(--ok);
+  }
+  .cat-dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+  .cat-dot.bank{ background:var(--petrol); }
+  .cat-dot.wise{ background:#1A56B0; }
+  .cat-dot.revolut{ background:#6B21A8; }
+
+  .row{
+    background:var(--card); border:1px solid var(--line); border-radius:9px;
+    padding:10px 12px; margin-bottom:8px; font-size:13.5px;
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .row .left{ min-width:0; }
+  .row .title{ color:var(--ink); font-weight:500; }
+  .row .meta{ color:var(--muted); font-size:12px; margin-top:2px; }
+  .row .amt{ font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px; white-space:nowrap; color:var(--ok); }
+
+  .empty-hint{ font-size:13px; color:#8A948F; padding:8px 2px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="brand" href="index.html">
+    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
+    <span>AA Scooter Rental</span>
+  </a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="customers.html">Customer Record</a>
+    <a href="pricing.html">Price Calculator</a>
+    <a href="parts.html">Parts &amp; Oil</a>
+    <a href="oilchange.html">Oil Change</a>
+    <a href="bikes.html">Bikes Status</a>
+    <a href="bikephotos.html">Bike Photos</a>
+    <a href="available-bikes.html">Available Bikes</a>
+    <a href="accounts.html">Accounts</a>
+    <a href="deposits.html" class="active">Deposits</a>
+  </nav>
+</div>
+
+<div class="page-head">
+  <h1>Deposits</h1>
+  <div class="sub" id="pageSub">Security deposits logged into the Bank (Scan), Wise, or Revolut tables this month — grouped by category, oldest first.</div>
+</div>
+
+<main>
+  <div class="load-status" id="loadStatus"></div>
+
+  <div class="total-bar">
+    <div class="l" id="totalLabel">Total Deposits (all categories)</div>
+    <div class="n" id="grandTotal">—</div>
+  </div>
+
+  <div id="depositsByCategory"></div>
+</main>
+
+<script>
+const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
+
+// Matches the CATEGORIES list in Code.gs's getDepositsData -- just used
+// here to control display order/labels/colors, since the server already
+// does the actual reading, header-checking and classification.
+const CATEGORIES = [
+  { key: 'bank', label: 'Bank' },
+  { key: 'wise', label: 'Wise' },
+  { key: 'revolut', label: 'Revolut' }
+];
+
+function setLoadStatus(msg, isError) {
+  const el = document.getElementById('loadStatus');
+  if (!msg) { el.classList.remove('show'); el.textContent = ''; return; }
+  el.textContent = msg;
+  el.style.color = isError ? '#C53030' : '#B36A2E';
+  el.style.background = isError ? '#FCEBEB' : '#FFF3E6';
+  el.style.borderColor = isError ? '#F3C6C6' : '#F3D9B8';
+  el.classList.add('show');
+}
+
+function money(n) {
+  if (n === '' || n === null || n === undefined || isNaN(Number(n))) return '—';
+  const num = Number(n);
+  const sign = num < 0 ? '-' : '';
+  return sign + '฿' + Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function loadDeposits() {
+  setLoadStatus('Loading deposits…');
+  document.getElementById('depositsByCategory').innerHTML = '';
+
+  let res;
+  try {
+    res = await fetch(scriptUrl + '?action=deposits').then(r => r.json());
+  } catch (err) {
+    setLoadStatus('Failed to load deposits: ' + err.message, true);
+    return;
+  }
+
+  if (!res || !res.success) {
+    setLoadStatus((res && res.error) || 'Failed to load deposits — please try again.', true);
+    return;
+  }
+
+  // Only the current month's sheet is read -- older months are closed-out
+  // history, kept on their own sheets for record-keeping only.
+  if (res.month) {
+    document.getElementById('pageSub').textContent =
+      'Security deposits logged into the Bank (Scan), Wise, or Revolut tables on the ' + res.month + ' sheet — grouped by category, oldest first.';
+    document.getElementById('totalLabel').textContent = 'Total Deposits — ' + res.month;
+  }
+
+  // The server already found this month's "deposit scan/wise/revolut"
+  // table, skipped any it couldn't verify the header on, and returned
+  // rows oldest-first. If it couldn't read a section (header moved,
+  // sheet edited by hand, etc.) that's surfaced here as a warning rather
+  // than silently showing incomplete numbers.
+  if (res.warnings && res.warnings.length) {
+    setLoadStatus(res.warnings.join(' '), true);
+  } else {
+    setLoadStatus(null);
+  }
+
+  render(res.deposits || []);
+}
+
+function render(deposits) {
+  const container = document.getElementById('depositsByCategory');
+
+  container.innerHTML = CATEGORIES.map(cat => {
+    const rows = deposits.filter(d => d.category === cat.key);
+    const total = rows.reduce((sum, d) => sum + (typeof d.amount === 'number' ? d.amount : 0), 0);
+    const rowsHtml = rows.length
+      ? rows.map(d => `
+        <div class="row">
+          <div class="left">
+            <div class="title">${d.name || '—'}</div>
+            <div class="meta">${d.date || ''}</div>
+          </div>
+          <div class="amt">${money(d.amount)}</div>
+        </div>
+      `).join('')
+      : '<div class="empty-hint">No ' + cat.label.toLowerCase() + ' deposits found.</div>';
+
+    return `
+      <div class="cat-section">
+        <div class="cat-head">
+          <h2><span class="cat-dot ${cat.key}"></span>${cat.label}</h2>
+          <div class="cat-total">${money(total)}</div>
+        </div>
+        ${rowsHtml}
+      </div>
+    `;
+  }).join('');
+
+  const grandTotal = deposits.reduce((sum, d) => sum + (typeof d.amount === 'number' ? d.amount : 0), 0);
+  document.getElementById('grandTotal').textContent = money(grandTotal);
+}
+
+loadDeposits();
+</script>
+
+</body>
+</html>
