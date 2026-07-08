@@ -93,6 +93,12 @@
   }
   .status.ok{ display:block; background:#E8F5EE; color:var(--ok); border:1px solid #BEE3CE; }
   .status.err{ display:block; background:#FCEBEB; color:var(--err); border:1px solid #F3C6C6; }
+  .status.progress{ display:flex; align-items:center; gap:9px; background:#EAF2FB; color:#2A5A8C; border:1px solid #BBD6F0; }
+  .status-spinner{
+    width:14px; height:14px; border:2px solid #BBD6F0; border-top-color:#2A5A8C;
+    border-radius:50%; flex-shrink:0; animation: status-spin 0.7s linear infinite;
+  }
+  @keyframes status-spin{ to{ transform:rotate(360deg); } }
   .field{ position:relative; }
   .ac-list{
     position:absolute; left:0; right:0; top:100%;
@@ -753,7 +759,6 @@ async function saveFields(fields, btn, statusBox, idleLabel) {
   const okToProceed = await confirmKmChangeIfNeeded(fields);
   if (!okToProceed) return; // user cancelled -- nothing saved
 
-  statusBox.className = 'status';
   btn.disabled = true;
   btn.textContent = 'Saving…';
 
@@ -763,6 +768,15 @@ async function saveFields(fields, btn, statusBox, idleLabel) {
     fields: fields
   };
 
+  // Fake staged progress ("Connecting…" then "Saving…") since Apps Script
+  // doesn't give us real progress events -- just something better than a
+  // silent wait while the request is in flight.
+  statusBox.className = 'status progress';
+  statusBox.innerHTML = '<span class="status-spinner"></span><span>Connecting…</span>';
+  const stageTimer = setTimeout(() => {
+    statusBox.innerHTML = '<span class="status-spinner"></span><span>Saving…</span>';
+  }, 500);
+
   try {
     const res = await fetch(scriptUrl, {
       method: 'POST',
@@ -770,6 +784,7 @@ async function saveFields(fields, btn, statusBox, idleLabel) {
       body: JSON.stringify(payload)
     });
     const data = await res.json();
+    clearTimeout(stageTimer);
     if (data.success) {
       if (data.warning) {
         // Post-write verification problems (the server re-reads what it
@@ -787,6 +802,7 @@ async function saveFields(fields, btn, statusBox, idleLabel) {
       throw new Error(data.error || 'Unknown error');
     }
   } catch (err) {
+    clearTimeout(stageTimer);
     statusBox.textContent = 'Could not save: ' + err.message;
     statusBox.className = 'status err';
   } finally {

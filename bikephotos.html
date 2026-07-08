@@ -153,6 +153,11 @@
     z-index:2;
   }
   .photo-card .del-btn:active{ background:rgba(197,48,48,.9); }
+  .photo-card .del-btn .del-spinner{
+    display:inline-block; width:12px; height:12px; border:2px solid rgba(255,255,255,.4);
+    border-top-color:#fff; border-radius:50%; animation: del-spin 0.7s linear infinite;
+  }
+  @keyframes del-spin{ to{ transform:rotate(360deg); } }
   .photo-card.uploading{ cursor:default; }
   .photo-card.uploading::after{
     content:"Uploading…";
@@ -480,6 +485,7 @@ function attachDeleteHandlers() {
       const card = btn.closest('.photo-card');
       card.style.opacity = '0.4';
       btn.disabled = true;
+      btn.innerHTML = '<span class="del-spinner"></span>';
       fetch(scriptUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -497,6 +503,7 @@ function attachDeleteHandlers() {
           alert('Could not delete: ' + err.message);
           card.style.opacity = '1';
           btn.disabled = false;
+          btn.innerHTML = '✕';
         });
     });
   });

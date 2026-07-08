@@ -492,8 +492,10 @@ function highlight(value, query) {
 
 let openReturnRowNumber = null;   // rowNumber whose inline return date-picker is showing
 let savingReturnRowNumber = null; // rowNumber currently being saved as returned
+let savingReturnStage = 'connecting'; // 'connecting' | 'saving' -- fake staged progress text on the Confirm button
 let openExtendRowNumber = null;   // rowNumber whose inline extend form is showing
 let savingExtendRowNumber = null; // rowNumber currently being saved as extended
+let savingExtendStage = 'connecting'; // 'connecting' | 'saving' -- fake staged progress text on the Confirm button
 
 function todayIso() {
   const d = new Date();
@@ -511,7 +513,7 @@ function renterActionsHtml(renter) {
     return `
       <div class="bc-actions bc-actions-picker">
         <input type="date" class="picker-input" id="returnDateInput-${rowNumber}" value="${todayIso()}" ${isSaving ? 'disabled' : ''}>
-        <button class="bc-btn confirm-return" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>${isSaving ? 'Saving…' : 'Confirm'}</button>
+        <button class="bc-btn confirm-return" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>${isSaving ? (savingReturnStage === 'saving' ? 'Saving…' : 'Connecting…') : 'Confirm'}</button>
         <button class="bc-btn cancel-return" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>Cancel</button>
       </div>
     `;
@@ -535,7 +537,7 @@ function renterActionsHtml(renter) {
           <label for="extendMonthCheckbox-${rowNumber}">Extend 1 month</label>
         </div>
         <div class="extend-note">1 month, or 30+ days, closes this booking out and starts a fresh rental record for the new period — the amount paid becomes that new record's total price.</div>
-        <button class="bc-btn confirm-extend" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>${isSaving ? 'Saving…' : 'Confirm'}</button>
+        <button class="bc-btn confirm-extend" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>${isSaving ? (savingExtendStage === 'saving' ? 'Saving…' : 'Connecting…') : 'Confirm'}</button>
         <button class="bc-btn cancel-extend" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>Cancel</button>
       </div>
     `;
@@ -820,7 +822,9 @@ document.getElementById('listBox').addEventListener('change', (e) => {
 
 function confirmReturn(rowNumber, isoDate) {
   savingReturnRowNumber = rowNumber;
+  savingReturnStage = 'connecting';
   render();
+  const stageTimer = setTimeout(() => { savingReturnStage = 'saving'; render(); }, 500);
 
   fetch(scriptUrl, {
     method: 'POST',
@@ -829,6 +833,7 @@ function confirmReturn(rowNumber, isoDate) {
   })
     .then(res => res.json())
     .then(result => {
+      clearTimeout(stageTimer);
       if (!result.success) throw new Error(result.error || 'Could not save.');
       // Post-write verification problems (the server re-reads what it
       // wrote and compares) come back as a warning -- the save DID go
@@ -853,6 +858,7 @@ function confirmReturn(rowNumber, isoDate) {
       }
     })
     .catch(err => {
+      clearTimeout(stageTimer);
       savingReturnRowNumber = null;
       render();
       alert('Could not mark as returned: ' + err.message);
@@ -918,7 +924,9 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
     }
 
     savingExtendRowNumber = rowNumber;
+    savingExtendStage = 'connecting';
     render();
+    const closeStageTimer = setTimeout(() => { savingExtendStage = 'saving'; render(); }, 500);
 
     fetch(scriptUrl, {
       method: 'POST',
@@ -927,6 +935,7 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
     })
       .then(res => res.json())
       .then(result => {
+        clearTimeout(closeStageTimer);
         if (!result.success) throw new Error(result.error || 'Could not close out the old booking.');
         // Post-write verification problems come back as a warning -- the
         // close-out DID go through, but something should be checked by hand.
@@ -948,6 +957,7 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
         window.location.href = 'customers.html?' + params.toString();
       })
       .catch(err => {
+        clearTimeout(closeStageTimer);
         savingExtendRowNumber = null;
         render();
         alert('Could not extend: ' + err.message);
@@ -958,7 +968,9 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
   // Short extension (under 30 days, checkbox not ticked): simple in-place
   // update, same as before.
   savingExtendRowNumber = rowNumber;
+  savingExtendStage = 'connecting';
   render();
+  const stageTimer = setTimeout(() => { savingExtendStage = 'saving'; render(); }, 500);
 
   fetch(scriptUrl, {
     method: 'POST',
@@ -967,6 +979,7 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
   })
     .then(res => res.json())
     .then(result => {
+      clearTimeout(stageTimer);
       if (!result.success) throw new Error(result.error || 'Could not save.');
       // Post-write verification problems (the server re-reads everything
       // it wrote -- customer row, income row, cash row, bikes/deposit
@@ -978,6 +991,7 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
       return loadData();
     })
     .catch(err => {
+      clearTimeout(stageTimer);
       savingExtendRowNumber = null;
       render();
       alert('Could not extend: ' + err.message);

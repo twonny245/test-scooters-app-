@@ -926,9 +926,9 @@ function processDepositForPayment(ss, paidByLower, rawAmount) {
 // running Wise/Revolut payment totals in fixed cells M11/M12). This instead
 // logs each Scan/Wise/Revolut security deposit as its own row in a growing
 // table on the current month's sheet:
-//   Scan    -> N (date), O (amount), P (name)
-//   Wise    -> Q (date), R (amount), S (name)
-//   Revolut -> U (date), V (amount), W (name)
+//   Scan    -> O (date), P (amount), Q (name)
+//   Wise    -> R (date), S (amount), T (name)
+//   Revolut -> V (date), W (amount), X (name)
 // Cash and Passport deposits need no logging here -- they're just noted on
 // the customer row itself.
 //
@@ -939,9 +939,9 @@ function processDepositForPayment(ss, paidByLower, rawAmount) {
 // gets overwritten. ----
 function logSecurityDeposit(ss, methodLower, rawAmount, customerName) {
   var COLUMNS_BY_METHOD = {
-    scan:    { date: 14, amount: 15, name: 16 }, // N, O, P
-    wise:    { date: 17, amount: 18, name: 19 }, // Q, R, S
-    revolut: { date: 21, amount: 22, name: 23 }  // U, V, W
+    scan:    { date: 15, amount: 16, name: 17 }, // O, P, Q
+    wise:    { date: 18, amount: 19, name: 20 }, // R, S, T
+    revolut: { date: 22, amount: 23, name: 24 }  // V, W, X
   };
   var cols = COLUMNS_BY_METHOD[methodLower];
   if (!cols) return; // Cash/Passport/unrecognized -- nothing to log.

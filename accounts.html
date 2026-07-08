@@ -201,6 +201,16 @@
     border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none;
   }
   .modal-error.show{ display:block; }
+  .modal-progress{
+    font-size:12.5px; color:#2A5A8C; background:#EAF2FB; border:1px solid #BBD6F0;
+    border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none; align-items:center; gap:9px;
+  }
+  .modal-progress.show{ display:flex; }
+  .modal-progress-spinner{
+    width:14px; height:14px; border:2px solid #BBD6F0; border-top-color:#2A5A8C;
+    border-radius:50%; flex-shrink:0; animation: modal-progress-spin 0.7s linear infinite;
+  }
+  @keyframes modal-progress-spin{ to{ transform:rotate(360deg); } }
   .modal-btn-row{ display:flex; gap:10px; margin-top:16px; }
   .modal-btn-row button{
     flex:1; padding:13px; border:none; border-radius:10px;
@@ -295,6 +305,7 @@
   <div class="modal-sheet">
     <h3 id="modalTitle">Add Expense</h3>
     <div class="modal-error" id="modalError"></div>
+    <div class="modal-progress" id="modalProgress"><span class="modal-progress-spinner"></span><span id="modalProgressText">Connecting…</span></div>
 
     <div id="modalFields">
     <div class="field">
@@ -740,6 +751,26 @@ function setModalError(msg) {
   modalError.classList.add('show');
 }
 
+// Lightweight "what's happening" indicator shown while a save/delete is
+// in flight. We don't get real progress events back from Apps Script, so
+// this fakes reasonable stages by time: show "Connecting…" immediately,
+// then flip to "Saving…" shortly after if the request is still pending.
+// stopSaveProgress() must be called (e.g. in a finally block) to hide it
+// and cancel the pending stage-change timer.
+const modalProgress = document.getElementById('modalProgress');
+const modalProgressText = document.getElementById('modalProgressText');
+let modalProgressTimer = null;
+function startSaveProgress() {
+  modalProgressText.textContent = 'Connecting…';
+  modalProgress.classList.add('show');
+  clearTimeout(modalProgressTimer);
+  modalProgressTimer = setTimeout(() => { modalProgressText.textContent = 'Saving…'; }, 500);
+}
+function stopSaveProgress() {
+  clearTimeout(modalProgressTimer);
+  modalProgress.classList.remove('show');
+}
+
 // Selects the option matching rawValue, ignoring case/whitespace, so a
 // sheet cell like "cash" still preselects the "Cash" option. Leaves the
 // select on its blank default if nothing matches.
@@ -899,11 +930,13 @@ async function runPendingPayload() {
 
   busyBtn.disabled = true;
   setModalError(null);
+  startSaveProgress();
   try {
     const res = await fetch(scriptUrl, {
       method: 'POST',
       body: JSON.stringify(payload)
     }).then(r => r.json());
+    stopSaveProgress();
 
     if (res.needsDisambiguation) {
       showCashDisambiguation(res.candidates, payload);
@@ -948,6 +981,7 @@ async function runPendingPayload() {
       alert((isDelete ? 'Deleted, but: ' : 'Saved, but: ') + res.warning);
     }
   } catch (err) {
+    stopSaveProgress();
     setModalError((isDelete ? 'Delete failed: ' : 'Save failed: ') + err.message);
   } finally {
     busyBtn.disabled = false;

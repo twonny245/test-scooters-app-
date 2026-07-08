@@ -194,6 +194,12 @@
   .status.ok{display:block; background:#E8F5EE; color:var(--ok); border:1px solid #BEE3CE;}
   .status.err{display:block; background:#FCEBEB; color:var(--err); border:1px solid #F3C6C6;}
   .status.warn{display:block; background:#FFF3E6; color:var(--warn); border:1px solid #F3D9B8;}
+  .status.progress{display:flex; align-items:center; gap:9px; background:#EAF2FB; color:#2A5A8C; border:1px solid #BBD6F0;}
+  .status-spinner{
+    width:14px; height:14px; border:2px solid #BBD6F0; border-top-color:#2A5A8C;
+    border-radius:50%; flex-shrink:0; animation: status-spin 0.7s linear infinite;
+  }
+  @keyframes status-spin{ to{ transform:rotate(360deg); } }
   .setup{
     background:#FBF6EC;
     border:1px dashed var(--line);
@@ -422,7 +428,7 @@
       <div class="row2">
         <div>
           <label for="totalPrice">Total price (฿)</label>
-          <input id="totalPrice" type="number" min="0" step="1" placeholder="2500">
+          <input id="totalPrice" type="number" min="0" step="1" placeholder="2500" required>
         </div>
         <div>
           <label for="paidBy">Paid by</label>
@@ -553,6 +559,25 @@ const form = document.getElementById('intakeForm');
 const statusBox = document.getElementById('statusBox');
 const submitBtn = document.getElementById('submitBtn');
 
+// Lightweight "what's happening" indicator shown while a save is in
+// flight. Apps Script doesn't give us real progress events, so this fakes
+// reasonable stages by time: "Connecting…" immediately, then "Saving…"
+// shortly after if still pending. stopSaveProgress() cancels the pending
+// stage-change timer; the caller then overwrites statusBox with the real
+// result (ok/warn/err) once the request settles.
+let saveProgressTimer = null;
+function startSaveProgress() {
+  statusBox.className = 'status progress';
+  statusBox.innerHTML = '<span class="status-spinner"></span><span>Connecting…</span>';
+  clearTimeout(saveProgressTimer);
+  saveProgressTimer = setTimeout(() => {
+    statusBox.innerHTML = '<span class="status-spinner"></span><span>Saving…</span>';
+  }, 500);
+}
+function stopSaveProgress() {
+  clearTimeout(saveProgressTimer);
+}
+
 // Tracks whether the entry currently in the form is a normal walk-in add
 // ("direct") or was auto-populated by the "Extend" flow on Bikes Status
 // ("extend"). Sent to the backend so the monthly/cash sheet rows read
@@ -637,6 +662,16 @@ form.addEventListener('submit', async (e) => {
   const rentingDateFrom = document.getElementById('rentingDateFrom').value;
   const returnDate = document.getElementById('returnDate').value;
   const totalPrice = document.getElementById('totalPrice').value;
+
+  if (totalPrice === '' || totalPrice === null || isNaN(Number(totalPrice))) {
+    statusBox.textContent = 'Please enter a total price before saving.';
+    statusBox.className = 'status err';
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Add to sheet';
+    document.getElementById('totalPrice').focus();
+    return;
+  }
+
   const baseContact = contactSelect.value === 'other' ? contactOther.value.trim() : contactSelect.value;
 
   function computeDays(fromStr, toStr) {
@@ -671,6 +706,7 @@ form.addEventListener('submit', async (e) => {
     source: entrySource
   };
 
+  startSaveProgress();
   try {
     const res = await fetch(scriptUrl, {
       method: 'POST',
@@ -678,6 +714,7 @@ form.addEventListener('submit', async (e) => {
       body: JSON.stringify(payload)
     });
     const data = await res.json();
+    stopSaveProgress();
     if (data.success) {
       if (data.warning) {
         statusBox.textContent = 'Added — "' + payload.name + '" saved, but: ' + data.warning;
@@ -709,6 +746,7 @@ form.addEventListener('submit', async (e) => {
       throw new Error(data.error || 'Unknown error');
     }
   } catch (err) {
+    stopSaveProgress();
     statusBox.textContent = 'Could not save: ' + err.message;
     statusBox.className = 'status err';
   } finally {
