@@ -271,6 +271,36 @@
     margin-top:14px; background:#fff; color:var(--petrol);
     border:1px solid var(--line);
   }
+  /* ---- Page gate: hide the tabs + form until the bikes list has
+     loaded from the spreadsheet, so nobody can start typing an entry
+     before the bike autocomplete (and plate data) is ready. ---- */
+  body:not(.bikes-ready) .tabs,
+  body:not(.bikes-ready) main{ display:none; }
+  .page-gate{
+    display:none;
+    max-width:520px; margin:26px auto; padding:0 16px;
+  }
+  body:not(.bikes-ready) .page-gate{ display:block; }
+  .page-gate .gate-card{
+    background:#FCEBEB; border:1px solid #F3C6C6; border-radius:14px;
+    padding:22px 20px; display:flex; align-items:center; gap:12px;
+  }
+  .page-gate .gate-msg{
+    color:#C62828; font-size:14.5px; font-weight:600; line-height:1.5;
+  }
+  .gate-spinner{
+    width:20px; height:20px; flex-shrink:0;
+    border:3px solid #F3C6C6; border-top-color:#C62828;
+    border-radius:50%; animation:gate-spin .7s linear infinite;
+  }
+  @keyframes gate-spin{ to{ transform:rotate(360deg); } }
+  .gate-retry{
+    width:auto; margin-top:0; padding:9px 16px;
+    background:#C62828; font-size:14px; display:none;
+  }
+  .page-gate.gate-error .gate-spinner{ display:none; }
+  .page-gate.gate-error .gate-retry{ display:inline-block; }
+
   .load-status{
     font-size:12px; color:#B36A2E; background:#FFF3E6;
     border:1px solid #F3D9B8; border-radius:7px;
@@ -303,6 +333,18 @@
 <div class="page-head">
   <h1>Customer Record</h1>
   <div class="sub">Adds a row straight into the "customer" tab</div>
+</div>
+
+<!-- Shown INSTEAD of the tabs + form until the bikes list has loaded
+     from the spreadsheet (see the body:not(.bikes-ready) CSS rules). -->
+<div class="page-gate" id="pageGate">
+  <div class="gate-card">
+    <div class="gate-spinner"></div>
+    <div>
+      <div class="gate-msg" id="pageGateMsg">Loading bikes from the spreadsheet…</div>
+      <button type="button" class="gate-retry" id="pageGateRetry">Try again</button>
+    </div>
+  </div>
 </div>
 
 <div class="tabs">
@@ -794,6 +836,19 @@ function setBikeModelLoadStatus(msg) {
   el.classList.add('show');
 }
 
+// ---- Page gate: the whole page (tabs + form) stays hidden behind a red
+// "Loading bikes…" card until the bikes list has actually arrived from
+// the spreadsheet, so an entry can never be started before the bike
+// autocomplete and plate data are ready. On failure the card shows the
+// error and a "Try again" button instead of leaving the page stuck. ----
+const pageGate = document.getElementById('pageGate');
+const pageGateMsg = document.getElementById('pageGateMsg');
+document.getElementById('pageGateRetry').addEventListener('click', () => {
+  pageGate.classList.remove('gate-error');
+  pageGateMsg.textContent = 'Loading bikes from the spreadsheet…';
+  loadBikeNames();
+});
+
 function loadBikeNames() {
   if (bikeNamesPromise) return bikeNamesPromise;
   setBikeModelLoadStatus('Loading bikes…');
@@ -809,10 +864,18 @@ function loadBikeNames() {
       bikeTaxRows = data.categoryRows || [];
       setBikeModelLoadStatus(null);
       renderResults();
+      // Bikes are in -- open the page up.
+      document.body.classList.add('bikes-ready');
       return bikeNames;
     })
     .catch(err => {
       setBikeModelLoadStatus('Could not load bike list: ' + err.message);
+      // Keep the page gated and show the error + retry on the card
+      // (unless a previous attempt already succeeded and opened the page).
+      if (!document.body.classList.contains('bikes-ready')) {
+        pageGate.classList.add('gate-error');
+        pageGateMsg.textContent = 'Could not load the bikes list: ' + err.message;
+      }
       bikeNamesPromise = null;
       return [];
     });
