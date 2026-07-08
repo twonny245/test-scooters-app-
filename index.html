@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AA Scooters — Staff Tools</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sand:#F5EFE6;
+    --ink:#1A2421;
+    --petrol:#0F3D3E;
+    --petrol-light:#175A5B;
+    --cone:#FF6B35;
+    --card:#FFFFFF;
+    --line:#DED4C2;
+    --muted:#5A6663;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--sand);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  .topbar{
+    background:var(--petrol);
+    padding:14px 16px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  .topbar .brand{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    text-decoration:none;
+  }
+  .topbar .brand img{
+    width:28px; height:28px;
+    object-fit:contain;
+  }
+  .topbar .brand span{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    color:#fff;
+    letter-spacing:.02em;
+  }
+  .topbar nav{
+    display:flex;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+  .topbar nav a{
+    color:#CFE3E0;
+    text-decoration:none;
+    font-size:12.5px;
+    font-weight:500;
+    padding:3px 0;
+    border-bottom:2px solid transparent;
+  }
+  .topbar nav a:hover{ color:#fff; }
+  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
+  .page-head{
+    max-width:520px;
+    margin:0 auto;
+    padding:26px 16px 4px;
+    text-align:center;
+  }
+  .page-head h1{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:28px;
+    color:var(--petrol);
+    margin:0;
+  }
+  .page-head .sub{
+    color:var(--muted);
+    font-size:13px;
+    margin-top:6px;
+  }
+  main{
+    max-width:520px;
+    margin:0 auto;
+    padding:24px 16px 60px;
+  }
+  .nav-card{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:18px;
+    margin-bottom:14px;
+    text-decoration:none;
+    color:var(--ink);
+    transition:transform .12s, box-shadow .12s, border-color .12s;
+  }
+  .nav-card:active{ transform:scale(.98); }
+  .nav-card:hover{ border-color:var(--petrol-light); box-shadow:0 6px 16px rgba(15,61,62,.08); }
+  .nav-icon{
+    flex-shrink:0;
+    width:52px; height:52px;
+    border-radius:12px;
+    background:var(--sand);
+    border:1px solid var(--line);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:24px;
+  }
+  .nav-text{ flex:1; min-width:0; }
+  .nav-title{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:19px;
+    color:var(--petrol);
+    letter-spacing:.01em;
+  }
+  .nav-desc{
+    font-size:12.5px;
+    color:var(--muted);
+    margin-top:2px;
+    line-height:1.4;
+  }
+  .nav-arrow{
+    flex-shrink:0;
+    color:var(--cone);
+    font-size:20px;
+    font-weight:700;
+  }
+  .section-label{
+    font-family:'Barlow Condensed',sans-serif;
+    font-size:12.5px;
+    font-weight:600;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:#7A8A86;
+    margin:26px 2px 10px;
+  }
+  .section-label:first-of-type{ margin-top:0; }
+  footer{
+    text-align:center;
+    font-size:11.5px;
+    color:#9AA6A1;
+    margin-top:30px;
+    padding:0 16px;
+  }
+  footer a{ color:var(--petrol); }
+
+  .lock-screen{
+    position:fixed; inset:0; z-index:9999;
+    background:var(--sand);
+    display:flex; align-items:center; justify-content:center;
+    padding:20px;
+  }
+  .lock-card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:28px 24px;
+    max-width:320px;
+    width:100%;
+    text-align:center;
+  }
+  .lock-icon{ font-size:32px; margin-bottom:10px; }
+  .lock-card h2{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:22px;
+    color:var(--petrol);
+    margin:0 0 6px;
+  }
+  .lock-card p{
+    font-size:13px;
+    color:var(--muted);
+    margin:0 0 18px;
+  }
+  .lock-card input{
+    width:100%;
+    padding:11px 12px;
+    border:1px solid var(--line);
+    border-radius:9px;
+    font-size:15px;
+    font-family:'Inter',sans-serif;
+    background:#FBFAF7;
+    color:var(--ink);
+    margin-bottom:12px;
+    text-align:center;
+    box-sizing:border-box;
+  }
+  .lock-card input:focus{ outline:none; border-color:var(--petrol-light); background:#fff; }
+  .lock-card button{
+    width:100%;
+    padding:12px;
+    border:none;
+    border-radius:10px;
+    background:var(--cone);
+    color:#fff;
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:15px;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    cursor:pointer;
+  }
+  .lock-card button:active{ transform:scale(.98); }
+  .lock-error{
+    display:none;
+    margin-top:12px;
+    font-size:12.5px;
+    color:#C53030;
+  }
+</style>
+</head>
+<body>
+
+<div class="lock-screen" id="lockScreen">
+  <div class="lock-card">
+    <div class="lock-icon">🔒</div>
+    <h2>Staff Access</h2>
+    <p>Enter the password to continue</p>
+    <input type="password" id="lockPassword" placeholder="Password" autocomplete="off">
+    <button id="lockSubmit" type="button">Unlock</button>
+    <div class="lock-error" id="lockError">Incorrect password — try again.</div>
+  </div>
+</div>
+<script>
+(function(){
+  var PASSWORD = "Aerox2016";
+  var lock = document.getElementById('lockScreen');
+  if (sessionStorage.getItem('aa_unlocked') === '1') {
+    lock.style.display = 'none';
+  }
+  function tryUnlock(){
+    var val = document.getElementById('lockPassword').value;
+    if (val === PASSWORD) {
+      sessionStorage.setItem('aa_unlocked', '1');
+      lock.style.display = 'none';
+    } else {
+      document.getElementById('lockError').style.display = 'block';
+      document.getElementById('lockPassword').value = '';
+      document.getElementById('lockPassword').focus();
+    }
+  }
+  document.getElementById('lockSubmit').addEventListener('click', tryUnlock);
+  document.getElementById('lockPassword').addEventListener('keydown', function(e){
+    if (e.key === 'Enter') tryUnlock();
+  });
+})();
+</script>
+
+<div class="topbar">
+  <a class="brand" href="index.html">
+    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
+    <span>AA Scooter Rental</span>
+  </a>
+  <nav>
+    <a href="index.html" class="active">Home</a>
+    <a href="customers.html">Customer Record</a>
+    <a href="pricing.html">Price Calculator</a>
+    <a href="parts.html">Parts &amp; Oil</a>
+    <a href="oilchange.html">Oil Change</a>
+    <a href="bikes.html">Bikes Status</a>
+    <a href="bikephotos.html">Bike Photos</a>
+    <a href="available-bikes.html">Available Bikes</a>
+    <a href="accounts.html">Accounts</a>
+  </nav>
+</div>
+
+<div class="page-head">
+  <h1>Staff Tools</h1>
+  <div class="sub">Pick a tool to get started</div>
+</div>
+
+<main>
+  <div class="section-label">Tools</div>
+
+  <a class="nav-card" href="customers.html">
+    <div class="nav-icon">📋</div>
+    <div class="nav-text">
+      <div class="nav-title">Customer Record</div>
+      <div class="nav-desc">Add a customer to the sheet, or search past rentals</div>
+    </div>
+    <div class="nav-arrow">›</div>
+  </a>
+
+  <a class="nav-card" href="pricing.html">
+    <div class="nav-icon">💰</div>
+    <div class="nav-text">
+      <div class="nav-title">Price Calculator</div>
+      <div class="nav-desc">Work out a rental quote by bike and date range</div>
+    </div>
+    <div class="nav-arrow">›</div>
+  </a>
+
+  <a class="nav-card" href="parts.html">
+    <div class="nav-icon">🔧</div>
+    <div class="nav-text">
+      <div class="nav-title">Parts &amp; Oil</div>
+      <div class="nav-desc">Search a bike and edit its parts &amp; oil change record</div>
+    </div>
+    <div class="nav-arrow">›</div>
+  </a>
+
+  <a class="nav-card" href="oilchange.html">
+    <div class="nav-icon">🛢️</div>
+    <div class="nav-text">
+      <div class="nav-title">Oil Change</div>
+      <div class="nav-desc">Bikes ranked by how soon they need an oil change</div>
+    </div>
+    <div class="nav-arrow">›</div>
+  </a>
+
+  <a class="nav-card" href="bikes.html">
+    <div class="nav-icon">🛵</div>
+    <div class="nav-text">
+      <div class="nav-title">Bikes Status</div>
+      <div class="nav-desc">All bikes, who they're rented to, and when they're due back</div>
+    </div>
+    <div class="nav-arrow">›</div>
+  </a>
+
+  <a class="nav-card" href="bikephotos.html">
+    <div class="nav-icon">📷</div>
+    <div class="nav-text">
+      <div class="nav-title">Bike Photos</div>
+      <div class="nav-desc">Search a bike and upload or delete its photos</div>
+    </div>
+    <div class="nav-arrow">›</div>
+  </a>
+
+  <a class="nav-card" href="available-bikes.html">
+    <div class="nav-icon">🗓️</div>
+    <div class="nav-text">
+      <div class="nav-title">Available Bikes</div>
+      <div class="nav-desc">See what's free right now, pick dates, and get the price</div>
+    </div>
+    <div class="nav-arrow">›</div>
+  </a>
+
+  <a class="nav-card" href="accounts.html">
+    <div class="nav-icon">📒</div>
+    <div class="nav-text">
+      <div class="nav-title">Accounts</div>
+      <div class="nav-desc">This month's totals, expenses, and income</div>
+    </div>
+    <div class="nav-arrow">›</div>
+  </a>
+
+  <footer>
+    AA Scooter Rental Chiang Mai · <a href="https://scooterrentalchiangmai.com" target="_blank" rel="noopener">scooterrentalchiangmai.com</a>
+  </footer>
+</main>
+
+</body>
+</html>
