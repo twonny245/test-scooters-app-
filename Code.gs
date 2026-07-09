@@ -192,6 +192,15 @@ function doPost(e) {
     if (data.action === 'deleteIncome') {
       return deleteIncomeRow(data);
     }
+    if (data.action === 'editDeposit') {
+      return editDepositEntry(data);
+    }
+    if (data.action === 'deleteDeposit') {
+      return deleteDepositEntry(data);
+    }
+    if (data.action === 'addDeposit') {
+      return addDepositEntry(data);
+    }
 
     // ---- Customer-intake behavior ----
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -325,12 +334,31 @@ function doPost(e) {
       Logger.log('Security deposit log warning: ' + secDepErr.message);
     }
 
+    // "Paid from an existing deposit" for a long extension (the checkbox on
+    // the customer-intake form, shown only when this row was auto-populated
+    // by the long-Extend flow -- isExtendSource). Deducts this rental's
+    // amount from the chosen deposit, same as the equivalent checkbox on
+    // the Accounts page's Add Income modal. Only makes sense for an
+    // extension continuing an existing booking -- a genuinely new customer
+    // (source "Direct") has no prior deposit to draw from, so this is
+    // skipped outright in that case even if the fields were somehow sent.
+    var depositSpendWarning = null;
+    try {
+      if (isExtendSource && data.paidFromDeposit) {
+        consumeDeposit(ss, data.depositCategory, Number(data.depositRow), data.totalPrice);
+      }
+    } catch (spendErr) {
+      depositSpendWarning = spendErr.message;
+      Logger.log('Deposit spend warning: ' + spendErr.message);
+    }
+
     var responsePayload = { success: true };
     var warnings = [];
     if (incomeSheetWarning) warnings.push(incomeSheetWarning);
     if (cashSheetWarning) warnings.push(cashSheetWarning);
     if (depositWarning) warnings.push(depositWarning);
     if (securityDepositWarning) warnings.push(securityDepositWarning);
+    if (depositSpendWarning) warnings.push(depositSpendWarning);
     if (bikesSheetWarning) warnings.push(bikesSheetWarning);
 
     // Post-write verification: re-read everything this intake wrote
@@ -589,43 +617,53 @@ function appendCashExpenseRowText(ss, expenseText, rawAmount) {
   return targetRow;
 }
 
-// ---- Adds an amount into one of the fixed deposit-tracking cells on the
-// current month's sheet -- M11 (next to the "wise(less deposit)" label in
-// L11) for Wise, M12 (next to "revolut(less deposit)" in L12) for Revolut.
-// These are fixed reference cells (not
-// something that grows with new rental rows), and the goal is to keep a
-// visible running total as a formula, e.g. "=100+300", rather than just
-// silently replacing the number. If the cell is empty, the formula becomes
-// "=amount". If it already holds a formula, "+amount" is appended to it. If
-// it holds a plain (non-formula) number -- as these cells currently do --
-// that number becomes the first term of a new "=existing+amount" formula,
-// so nothing already there is lost. ----
-function addAmountToDepositCell(sheet, row, col, rawAmount) {
-  var amount = Number(rawAmount);
-  if (rawAmount === '' || rawAmount === null || rawAmount === undefined || isNaN(amount)) return;
-
+// ---- Grows whatever's in a cell by `delta` (positive to add, negative to
+// subtract) as a visible running formula, e.g. "=100+300" or "=1000-100",
+// rather than silently replacing it with a plain computed number. If the
+// cell is empty, the formula becomes "=delta". If it already holds a
+// formula, "+delta" (or "-|delta|", since delta's own sign supplies the
+// minus) is appended to it. If it holds a plain (non-formula) number, that
+// number becomes the first term of a new "=existing±delta" formula, so
+// nothing already there is lost. Used for both the fixed Wise/Revolut
+// running-total cells (M11/M12) and individual deposit-table amount
+// cells, so anyone looking at the sheet can see exactly what was added or
+// deducted and when, not just the final number. ----
+function growFormulaCell(sheet, row, col, delta, verifyLabel) {
   var range = sheet.getRange(row, col);
   var formula = range.getFormula();
-
-  // The evaluated value before this write -- the post-write check below
-  // expects the cell to evaluate to (before + amount) afterwards.
-  var beforeVal = Number(range.getValue());
-  if (isNaN(beforeVal)) beforeVal = 0;
+  var sign = delta >= 0 ? '+' : ''; // delta's own '-' already appears when stringified negative
+  var beforeVal;
 
   if (formula && formula.charAt(0) === '=') {
-    range.setFormula(formula + '+' + amount);
+    beforeVal = Number(range.getValue());
+    if (isNaN(beforeVal)) beforeVal = 0;
+    range.setFormula(formula + sign + delta);
   } else {
     var currentValue = range.getValue();
     if (currentValue === '' || currentValue === null || isNaN(Number(currentValue))) {
-      range.setFormula('=' + amount);
       beforeVal = 0;
+      range.setFormula('=' + delta);
     } else {
-      range.setFormula('=' + Number(currentValue) + '+' + amount);
       beforeVal = Number(currentValue);
+      range.setFormula('=' + beforeVal + sign + delta);
     }
   }
 
-  verifyCell(sheet.getName(), row, col, beforeVal + amount,
+  verifyCell(sheet.getName(), row, col, beforeVal + delta,
+    verifyLabel || ('running total at "' + sheet.getName() + '" ' + columnToLetter(col) + row));
+  return beforeVal + delta;
+}
+
+// ---- Adds an amount into one of the fixed deposit-tracking cells on the
+// current month's sheet -- M11 (next to the "wise(less deposit)" label in
+// L11) for Wise, M12 (next to "revolut(less deposit)" in L12) for Revolut.
+// These are fixed reference cells (not something that grows with new
+// rental rows) -- see growFormulaCell above for how the running-formula
+// growth itself works. ----
+function addAmountToDepositCell(sheet, row, col, rawAmount) {
+  var amount = Number(rawAmount);
+  if (rawAmount === '' || rawAmount === null || rawAmount === undefined || isNaN(amount)) return;
+  growFormulaCell(sheet, row, col, amount,
     'running deposit total at "' + sheet.getName() + '" ' + columnToLetter(col) + row);
 }
 
@@ -1218,6 +1256,19 @@ function extendBikeRow(data) {
       warnings.push('Deposit total: ' + depositErr.message);
     }
 
+    // "Paid from an existing deposit" -- same checkbox/dropdown as the
+    // Accounts page's Add Income modal, offered here too since a short
+    // extension is itself just another income entry. Deducts amountPaid
+    // from the chosen deposit; independent of the Wise/Revolut running
+    // total above (both can fire together, same as addIncomeRow).
+    try {
+      if (data.paidFromDeposit) {
+        consumeDeposit(ss, data.depositCategory, Number(data.depositRow), amountPaid);
+      }
+    } catch (spendErr) {
+      warnings.push('Deposit spend: ' + spendErr.message);
+    }
+
     try {
       addRentalAmountToBikesSheet(ss, bikeModel, amountPaid);
     } catch (bikesErr) {
@@ -1609,6 +1660,16 @@ function getOperationStatusRows() {
 var ACCOUNTS_MONTH_NAMES = ['January','February','March','April','May','June',
   'July','August','September','October','November','December'];
 
+// ---- Shared by getDepositsData and consumeDeposit below -- the three
+// security-deposit tables that live on the current month's sheet (see
+// logSecurityDeposit). Keeping one definition means the read side (listing
+// deposits) and the write side (spending one) can never drift apart. ----
+var DEPOSIT_CATEGORIES = [
+  { key: 'bank', label: 'Bank', header: 'deposit scan', dateCol: 15, amountCol: 16, nameCol: 17 },    // O, P, Q
+  { key: 'wise', label: 'Wise', header: 'deposit wise', dateCol: 18, amountCol: 19, nameCol: 20 },     // R, S, T
+  { key: 'revolut', label: 'Revolut', header: 'deposit revolut', dateCol: 22, amountCol: 23, nameCol: 24 } // V, W, X
+];
+
 // ---- Plain Levenshtein edit distance, used only to tolerate typos in a
 // month tab's name (e.g. "Feburary" should still resolve to February). ----
 function levenshteinDistance(a, b) {
@@ -1665,16 +1726,24 @@ function findMonthSheetFuzzy(ss, fullMonthName) {
 }
 
 // ---- Expense classification: each expense entry can be tagged as
-// Business, Personal, Wages/Bike Purchase, or To Transfer. Rather than
-// storing the tag anywhere new, it's represented purely as the background
-// color of the expense description cell (column B) -- Business is the
-// default (no fill), so old, never-classified entries read back as
-// Business automatically with nothing to migrate. ----
+// Business, Personal, Wages/Bike Purchase, To Transfer, or Already
+// Transferred. Rather than storing the tag anywhere new, it's represented
+// purely as the background color of the expense description cell (column
+// B) -- Business is the default (no fill), so old, never-classified
+// entries read back as Business automatically with nothing to migrate.
+//
+// Colors are kept lowercase here on purpose: Sheets normalizes background
+// colors to lowercase hex when read back via getBackground(), so if a
+// value here were mixed-case, expenseTypeFromColor's comparison would
+// silently never match and that type would always read back as Business
+// (this bit us once already with the transfer color -- keep these
+// lowercase). ----
 var EXPENSE_TYPE_COLORS = {
-  business: null,       // no fill -- the default, unclassified look
-  personal: '#cfe2f3',  // light blue
-  wages: '#f6b26b',     // orange
-  transfer: '#fff2cc'   // light yellow
+  business: null,             // no fill -- the default, unclassified look
+  personal: '#cfe2f3',        // light blue
+  wages: '#f6b26b',           // orange
+  transfer: '#ffeb3b',        // bright yellow
+  transferComplete: '#00e676' // bright green
 };
 
 // ---- Colors the expense description cell (column B) of the given row to
@@ -1690,13 +1759,21 @@ function applyExpenseTypeColor(sheet, row, type) {
 // ---- The reverse of applyExpenseTypeColor -- reads a cell's background
 // color back and maps it to a classification, so getAccountsData can tell
 // the client which type an existing entry already has (to prefill the
-// dropdown on Edit). Anything that isn't one of the three colored types
-// (including plain white/no-fill) reads back as Business. ----
+// dropdown on Edit). Anything that isn't one of the colored types
+// (including plain white/no-fill) reads back as Business. Driven off the
+// EXPENSE_TYPE_COLORS map itself (rather than one hardcoded "if" per type)
+// so adding a new type there is the only change needed -- there's no
+// second place to remember to update. ----
 function expenseTypeFromColor(hex) {
   var h = (hex || '').toString().trim().toLowerCase();
-  if (h === EXPENSE_TYPE_COLORS.personal) return 'personal';
-  if (h === EXPENSE_TYPE_COLORS.wages) return 'wages';
-  if (h === EXPENSE_TYPE_COLORS.transfer) return 'transfer';
+  if (!h) return 'business';
+  var keys = Object.keys(EXPENSE_TYPE_COLORS);
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    if (key === 'business') continue; // no color of its own -- it's the fallback
+    var colorVal = (EXPENSE_TYPE_COLORS[key] || '').toString().trim().toLowerCase();
+    if (colorVal && h === colorVal) return key;
+  }
   return 'business';
 }
 
@@ -2014,12 +2091,6 @@ function getDepositsData() {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var tz = ss.getSpreadsheetTimeZone();
 
-    var CATEGORIES = [
-      { key: 'bank', label: 'Bank', header: 'deposit scan', dateCol: 15, amountCol: 16, nameCol: 17 },    // O, P, Q
-      { key: 'wise', label: 'Wise', header: 'deposit wise', dateCol: 18, amountCol: 19, nameCol: 20 },     // R, S, T
-      { key: 'revolut', label: 'Revolut', header: 'deposit revolut', dateCol: 22, amountCol: 23, nameCol: 24 } // V, W, X
-    ];
-
     function norm(s) { return (s || '').toString().trim().toLowerCase(); }
     function cellToString(val) {
       if (val instanceof Date) return Utilities.formatDate(val, tz, 'dd/MM/yyyy');
@@ -2041,7 +2112,7 @@ function getDepositsData() {
     var deposits = [];
     var warnings = [];
 
-    CATEGORIES.forEach(function(cat) {
+    DEPOSIT_CATEGORIES.forEach(function(cat) {
       var headerCell = sheet.getRange(1, cat.dateCol);
       var headerRaw = headerCell.getValue();
       if (norm(headerRaw) !== cat.header) {
@@ -2069,6 +2140,7 @@ function getDepositsData() {
         if (dateEmpty && amtEmpty && nameEmpty) continue; // gap row -- skip, keep scanning down.
 
         rowsFound.push({
+          row: i + 2, // combined 0-based index -> actual sheet row (data starts at row 2)
           category: cat.key,
           categoryLabel: cat.label,
           date: cellToString(dateRaw),
@@ -2090,6 +2162,296 @@ function getDepositsData() {
       }))
       .setMimeType(ContentService.MimeType.JSON);
 
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- Shared by consumeDeposit/editDepositEntry/deleteDepositEntry below --
+// locates the current month's sheet (throwing errSuffix appended to a
+// "couldn't find the sheet" message if it can't be found). ----
+function locateCurrentDepositSheet(ss, errSuffix) {
+  var currentMonthIndex = Number(Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'M')) - 1;
+  var monthName = ACCOUNTS_MONTH_NAMES[currentMonthIndex];
+  var sheet = findMonthSheetFuzzy(ss, monthName);
+  if (!sheet) {
+    throw new Error('No sheet found matching "' + monthName + '" -- ' + errSuffix + '.');
+  }
+  return sheet;
+}
+
+// ---- Shared by consumeDeposit/editDepositEntry/deleteDepositEntry below --
+// confirms a deposit category's header cell is still where expected.
+// Checks the exact expected cell first; if that's drifted, searches a
+// small window of rows around it (headers only ever move a row or two if
+// at all -- this is NOT a search across other columns) before giving up
+// and throwing -- same "don't silently write to the wrong place" rule
+// processDepositForPayment uses for the M11/M12 cells. Returns the header
+// row (usually 1). ----
+function locateDepositHeaderRow(sheet, cat, errSuffix) {
+  function norm(s) { return (s || '').toString().trim().toLowerCase(); }
+  if (norm(sheet.getRange(1, cat.dateCol).getValue()) === cat.header) return 1;
+  var searchRows = Math.min(6, sheet.getMaxRows());
+  var colVals = sheet.getRange(1, cat.dateCol, searchRows, 1).getValues();
+  for (var r = 0; r < colVals.length; r++) {
+    if (norm(colVals[r][0]) === cat.header) return r + 1;
+  }
+  throw new Error('Could not find the "' + cat.header + '" header in column ' + columnToLetter(cat.dateCol) +
+    ' of the "' + sheet.getName() + '" sheet -- ' + errSuffix + '. The column may have moved, please go have a look.');
+}
+
+// ---- Deducts deductAmount from one existing security deposit against a
+// new income entry (Accounts page, Add Income modal, "Paid from an
+// existing deposit" checkbox). Called from addIncomeRow -- NOT from the
+// expense side, and NOT from editIncome, which leaves deposit balances
+// untouched.
+//
+// depositRow is the sheet row the front end read back from action=deposits
+// (which lists row numbers alongside each deposit) -- so this writes
+// directly to that row rather than re-searching for it, but re-validates
+// everything first:
+//   1. The category's header cell (O1/R1/V1) still says what's expected.
+//      If it's not exactly there, this searches a few rows either side in
+//      case things shifted, and only THEN gives up and throws -- same
+//      "don't silently write to the wrong place" rule processDepositForPayment
+//      uses for the M11/M12 cells below.
+//   2. depositRow itself still holds a real entry (not already blank --
+//      e.g. someone else already spent it, or the page was stale).
+//   3. deductAmount doesn't exceed what's actually left in that deposit --
+//      if it does, this throws instead of pushing the balance negative,
+//      and nothing on the row is touched.
+//
+// Only the amount cell is touched -- date and name are left exactly as
+// they were, so a partially-spent deposit stays visible with its reduced
+// balance. It's only cleared out entirely (date + amount + name, so the
+// row becomes an ordinary gap row logSecurityDeposit can reuse) once the
+// deduction brings it to zero. ----
+function consumeDeposit(ss, categoryKey, depositRow, deductAmount) {
+  var cat = DEPOSIT_CATEGORIES.filter(function(c) { return c.key === categoryKey; })[0];
+  if (!cat) {
+    throw new Error('Unrecognized deposit category "' + categoryKey + '" -- the deposit was NOT updated.');
+  }
+  if (!depositRow || depositRow < 2) {
+    throw new Error('Invalid deposit row -- the deposit was NOT updated.');
+  }
+  var deduct = Number(deductAmount);
+  if (isNaN(deduct) || deduct <= 0) {
+    throw new Error('Invalid amount to deduct -- the deposit was NOT updated.');
+  }
+
+  function norm(s) { return (s || '').toString().trim().toLowerCase(); }
+
+  var sheet = locateCurrentDepositSheet(ss, 'the deposit was NOT updated');
+
+  // 1. Confirm the header is still where it should be.
+  locateDepositHeaderRow(sheet, cat, 'the deposit was NOT updated');
+
+  // 2. Confirm depositRow still holds a real entry, not a totals row and
+  // not already blank (spent by someone else, or the list was stale).
+  var dateVal = sheet.getRange(depositRow, cat.dateCol).getValue();
+  var amtVal = sheet.getRange(depositRow, cat.amountCol).getValue();
+  var nameVal = sheet.getRange(depositRow, cat.nameCol).getValue();
+  if (norm(dateVal) === 'total') {
+    throw new Error('That row is the "' + cat.label + '" totals row, not a deposit -- the deposit was NOT updated.');
+  }
+  var rowEmpty = (dateVal === '' || dateVal === null) && (amtVal === '' || amtVal === null) && (nameVal === '' || nameVal === null);
+  if (rowEmpty) {
+    throw new Error('That ' + cat.label + ' deposit no longer exists (it may have already been used) -- please refresh the deposit list and pick again.');
+  }
+
+  // 3. Don't let the deduction push the balance negative.
+  var currentAmount = (amtVal === '' || amtVal === null || isNaN(Number(amtVal))) ? 0 : Number(amtVal);
+  var EPSILON = 0.005; // tolerate float rounding noise around an exact-zero result
+  var remaining = currentAmount - deduct;
+  if (remaining < -EPSILON) {
+    throw new Error('This income (' + deduct.toFixed(2) + ') is more than what\'s left in this ' + cat.label +
+      ' deposit (' + currentAmount.toFixed(2) + ') -- the deposit was NOT updated. Pick a different deposit or fix the amount.');
+  }
+
+  if (remaining <= EPSILON) {
+    // Fully spent -- clear date, amount and name so the row becomes an
+    // ordinary gap row logSecurityDeposit can reuse.
+    sheet.getRange(depositRow, cat.dateCol).setValue('');
+    sheet.getRange(depositRow, cat.amountCol).setValue('');
+    sheet.getRange(depositRow, cat.nameCol).setValue('');
+    verifyCell(sheet.getName(), depositRow, cat.dateCol, '', cat.label + ' deposit: cleared date (fully spent)');
+    verifyCell(sheet.getName(), depositRow, cat.amountCol, '', cat.label + ' deposit: cleared amount (fully spent)');
+    verifyCell(sheet.getName(), depositRow, cat.nameCol, '', cat.label + ' deposit: cleared name (fully spent)');
+  } else {
+    // Partially spent -- only the amount changes, date and name stay put.
+    // Written as a growing formula (e.g. "=1000-100"), same as the
+    // Wise/Revolut running totals, so the cell itself shows what was
+    // deducted and when instead of just the final number.
+    growFormulaCell(sheet, depositRow, cat.amountCol, -deduct,
+      cat.label + ' deposit: reduced amount after partial use');
+  }
+}
+
+// ---- action:'editDeposit' -- Deposits page, click a deposit to edit its
+// date, name and/or amount, then Save. data: { category, row, date
+// (yyyy-mm-dd or blank), name, amount }.
+//
+// This is a manual correction, not a transaction -- unlike consumeDeposit
+// it does NOT use the growing "=x-y" formula pattern, it just overwrites
+// the cell with whatever was typed. It touches ONLY the date/amount/name
+// cells for this one row -- nothing else (Wise/Revolut running totals,
+// income/expense rows, other deposits) is read or written. ----
+function editDepositEntry(data) {
+  try {
+    var cat = DEPOSIT_CATEGORIES.filter(function(c) { return c.key === data.category; })[0];
+    if (!cat) throw new Error('Unrecognized deposit category "' + data.category + '".');
+    var row = Math.round(Number(data.row));
+    if (!row || row < 2) throw new Error('Invalid deposit row.');
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    function norm(s) { return (s || '').toString().trim().toLowerCase(); }
+
+    var sheet = locateCurrentDepositSheet(ss, 'the deposit was NOT changed');
+    locateDepositHeaderRow(sheet, cat, 'the deposit was NOT changed');
+
+    var existingDate = sheet.getRange(row, cat.dateCol).getValue();
+    if (norm(existingDate) === 'total') {
+      throw new Error('That row is the "' + cat.label + '" totals row, not a deposit -- it was NOT changed.');
+    }
+
+    var newAmount = (data.amount === '' || data.amount === undefined || data.amount === null) ? '' : Number(data.amount);
+    if (newAmount !== '' && isNaN(newAmount)) throw new Error('Invalid amount.');
+    var newName = (data.name || '').toString().trim();
+    var newDate = data.date ? new Date(String(data.date).trim() + 'T00:00:00') : '';
+
+    sheet.getRange(row, cat.dateCol).setValue(newDate);
+    sheet.getRange(row, cat.amountCol).setValue(newAmount);
+    sheet.getRange(row, cat.nameCol).setValue(newName);
+
+    verifyCell(sheet.getName(), row, cat.dateCol, newDate, cat.label + ' deposit: edited date');
+    verifyCell(sheet.getName(), row, cat.amountCol, newAmount, cat.label + ' deposit: edited amount');
+    verifyCell(sheet.getName(), row, cat.nameCol, newName, cat.label + ' deposit: edited name');
+
+    var verification = runWriteVerification(ss);
+    var responsePayload = { success: true };
+    if (verification.problems.length) responsePayload.warning = verification.problems.join(' ');
+
+    return ContentService
+      .createTextOutput(JSON.stringify(responsePayload))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- action:'deleteDeposit' -- Deposits page, "Remove deposit" (behind a
+// confirmation prompt on the front end). data: { category, row }.
+//
+// Clears ONLY the date/amount/name cells for this one security-deposit
+// entry, turning the row back into an ordinary blank gap row
+// logSecurityDeposit can reuse later. Nothing else is touched -- no
+// running totals, no income/expense rows -- same "just those three cells"
+// rule editDepositEntry uses. ----
+function deleteDepositEntry(data) {
+  try {
+    var cat = DEPOSIT_CATEGORIES.filter(function(c) { return c.key === data.category; })[0];
+    if (!cat) throw new Error('Unrecognized deposit category "' + data.category + '".');
+    var row = Math.round(Number(data.row));
+    if (!row || row < 2) throw new Error('Invalid deposit row.');
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    function norm(s) { return (s || '').toString().trim().toLowerCase(); }
+
+    var sheet = locateCurrentDepositSheet(ss, 'the deposit was NOT removed');
+    locateDepositHeaderRow(sheet, cat, 'the deposit was NOT removed');
+
+    var existingDate = sheet.getRange(row, cat.dateCol).getValue();
+    if (norm(existingDate) === 'total') {
+      throw new Error('That row is the "' + cat.label + '" totals row, not a deposit -- it was NOT removed.');
+    }
+
+    sheet.getRange(row, cat.dateCol).setValue('');
+    sheet.getRange(row, cat.amountCol).setValue('');
+    sheet.getRange(row, cat.nameCol).setValue('');
+
+    verifyCell(sheet.getName(), row, cat.dateCol, '', cat.label + ' deposit: cleared date (removed)');
+    verifyCell(sheet.getName(), row, cat.amountCol, '', cat.label + ' deposit: cleared amount (removed)');
+    verifyCell(sheet.getName(), row, cat.nameCol, '', cat.label + ' deposit: cleared name (removed)');
+
+    var verification = runWriteVerification(ss);
+    var responsePayload = { success: true };
+    if (verification.problems.length) responsePayload.warning = verification.problems.join(' ');
+
+    return ContentService
+      .createTextOutput(JSON.stringify(responsePayload))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- action:'addDeposit' -- Deposits page, "Add Deposit" button. data:
+// { category, date (yyyy-mm-dd, optional -- defaults to today), name,
+// amount }.
+//
+// Finds the first free gap row above the totals row in that category's
+// table on the CURRENT month's sheet -- same free-row search
+// logSecurityDeposit uses when a customer-intake deposit is logged -- and
+// writes the date/amount/name there. Touches ONLY that one new row --
+// nothing else (running Wise/Revolut totals, income/expense rows, other
+// deposits) is read or written. ----
+function addDepositEntry(data) {
+  try {
+    var cat = DEPOSIT_CATEGORIES.filter(function(c) { return c.key === data.category; })[0];
+    if (!cat) throw new Error('Unrecognized deposit category "' + data.category + '".');
+
+    var amount = (data.amount === '' || data.amount === undefined || data.amount === null) ? '' : Number(data.amount);
+    if (amount === '' || isNaN(amount) || amount <= 0) throw new Error('Enter a valid deposit amount.');
+    var name = (data.name || '').toString().trim();
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    function norm(s) { return (s || '').toString().trim().toLowerCase(); }
+
+    var sheet = locateCurrentDepositSheet(ss, 'the deposit was NOT added');
+    locateDepositHeaderRow(sheet, cat, 'the deposit was NOT added');
+
+    var maxRow = sheet.getMaxRows();
+    var rowsToScan = maxRow - 1; // starting at row 2
+    var dateVals = sheet.getRange(2, cat.dateCol, rowsToScan, 1).getValues();
+    var amtVals = sheet.getRange(2, cat.amountCol, rowsToScan, 1).getValues();
+    var nameVals = sheet.getRange(2, cat.nameCol, rowsToScan, 1).getValues();
+
+    var targetRow = null;
+    for (var i = 0; i < dateVals.length; i++) {
+      if (norm(dateVals[i][0]) === 'total') break; // don't write into or past the totals row.
+      var dateEmpty = dateVals[i][0] === '' || dateVals[i][0] === null;
+      var amtEmpty = amtVals[i][0] === '' || amtVals[i][0] === null;
+      var nameEmpty = nameVals[i][0] === '' || nameVals[i][0] === null;
+      if (dateEmpty && amtEmpty && nameEmpty) { targetRow = i + 2; break; }
+    }
+    if (!targetRow) {
+      throw new Error('Could not find a free row above the totals row in the ' + cat.label +
+        ' deposit section of "' + sheet.getName() + '" -- the deposit was NOT added.');
+    }
+
+    var dateVal = data.date ? new Date(String(data.date).trim() + 'T00:00:00') : new Date();
+
+    sheet.getRange(targetRow, cat.dateCol).setValue(dateVal);
+    sheet.getRange(targetRow, cat.amountCol).setValue(amount);
+    sheet.getRange(targetRow, cat.nameCol).setValue(name);
+
+    verifyCell(sheet.getName(), targetRow, cat.dateCol, dateVal, cat.label + ' deposit: added date');
+    verifyCell(sheet.getName(), targetRow, cat.amountCol, amount, cat.label + ' deposit: added amount');
+    verifyCell(sheet.getName(), targetRow, cat.nameCol, name, cat.label + ' deposit: added name');
+
+    var verification = runWriteVerification(ss);
+    var responsePayload = { success: true, row: targetRow };
+    if (verification.problems.length) responsePayload.warning = verification.problems.join(' ');
+
+    return ContentService
+      .createTextOutput(JSON.stringify(responsePayload))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService
       .createTextOutput(JSON.stringify({ success: false, error: err.message }))
@@ -2583,8 +2945,9 @@ function buildGeneralIncomeText(data) {
 }
 
 // ---- action:'addIncome' -- data: { monthIndex, date, income, name,
-// amount, paidBy }. Writes into a fresh row's F/G/H/I/J columns only,
-// leaving whatever is in that row's expense columns (A-D) untouched.
+// amount, paidBy, paidFromDeposit, depositCategory, depositRow }. Writes
+// into a fresh row's F/G/H/I/J columns only, leaving whatever is in that
+// row's expense columns (A-D) untouched.
 //
 // Then, exactly like a new customer rental (or an extension) does in
 // doPost/extendBikeRow above, routes the payment based on paidBy:
@@ -2592,6 +2955,19 @@ function buildGeneralIncomeText(data) {
 //   Wise    -> added into the running Wise deposit total (M11).
 //   Revolut -> added into the running Revolut deposit total (M12).
 //   Scan (or anything else) -> nothing further; the F-J row is enough.
+//
+// Separately -- and only when the "Paid from an existing deposit"
+// checkbox was ticked on the Add Income form -- consumeDeposit() deducts
+// this income's amount from the chosen deposit's balance (only clearing
+// the row entirely once that balance hits zero). That's independent of
+// the Wise/Revolut routing above: e.g. an income paid "from deposit"
+// against a Wise deposit still adds to M11 (the money's still effectively
+// arriving via Wise), AND reduces the spent deposit's balance; a
+// Bank/Scan deposit only does the latter, since there's no equivalent
+// running total for Bank. This never applies on the expense side, and
+// never on editIncome -- editing an existing income entry doesn't touch
+// deposit balances.
+//
 // Each routing step is wrapped so a problem there never rolls back the
 // income row itself, which is already saved by this point -- any issue is
 // returned as a non-fatal "warning" instead. ----
@@ -2634,6 +3010,14 @@ function addIncomeRow(data) {
       }
     } catch (depositErr) {
       warnings.push('Deposit total: ' + depositErr.message);
+    }
+
+    try {
+      if (data.paidFromDeposit) {
+        consumeDeposit(ss, data.depositCategory, Number(data.depositRow), data.amount);
+      }
+    } catch (spendErr) {
+      warnings.push('Deposit spend: ' + spendErr.message);
     }
 
     // Post-write verification: re-read everything this add wrote and

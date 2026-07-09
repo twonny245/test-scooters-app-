@@ -126,6 +126,50 @@
 
   .no-data-section{ margin-top:22px; }
   .empty-hint{ font-size:13px; color:#8A948F; padding:14px 2px; text-align:center; }
+
+  .bc-actions{ margin-top:10px; }
+  .contact-btn{
+    border:1px solid var(--petrol-light); background:#EEF5F2; color:var(--petrol);
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:12.5px;
+    letter-spacing:.04em; text-transform:uppercase; padding:7px 12px; border-radius:8px;
+    cursor:pointer;
+  }
+  .contact-btn:active{ transform:scale(.98); }
+
+  /* Contact Customer modal */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(15,36,33,.45);
+    display:none; align-items:flex-end; justify-content:center; z-index:1000;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal-sheet{
+    background:var(--card); width:100%; max-width:480px;
+    border-radius:16px 16px 0 0; padding:20px 18px 24px;
+    max-height:90vh; overflow-y:auto;
+  }
+  @media (min-width:560px){
+    .modal-backdrop{ align-items:center; }
+    .modal-sheet{ border-radius:16px; }
+  }
+  .modal-sheet h3{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:20px;
+    color:var(--petrol); margin:0 0 4px;
+  }
+  .modal-sub{ font-size:12px; color:var(--muted); margin-bottom:12px; }
+  .modal-msg-box{
+    white-space:pre-wrap; font-size:14px; line-height:1.5; color:var(--ink);
+    background:#FBFAF7; border:1px solid var(--line); border-radius:9px;
+    padding:12px 13px; max-height:40vh; overflow-y:auto;
+  }
+  .modal-btn-row{ display:flex; gap:10px; margin-top:16px; }
+  .modal-btn-row button{
+    flex:1; padding:13px; border:none; border-radius:10px;
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:14px;
+    letter-spacing:.03em; text-transform:uppercase; cursor:pointer;
+  }
+  .modal-btn-row button:active{ transform:scale(.98); }
+  .btn-copy{ background:var(--cone); color:#fff; }
+  .btn-close{ background:#EFEAE0; color:var(--petrol); }
 </style>
 </head>
 <body>
@@ -170,6 +214,18 @@
   <div id="listBox"></div>
   <div class="no-data-section" id="noDataSection"></div>
 </main>
+
+<div class="modal-backdrop" id="contactModalBackdrop">
+  <div class="modal-sheet">
+    <h3>Contact Customer</h3>
+    <div class="modal-sub" id="contactModalSub"></div>
+    <div class="modal-msg-box" id="contactModalMsg"></div>
+    <div class="modal-btn-row">
+      <button type="button" class="btn-close" id="contactModalCloseBtn">Close</button>
+      <button type="button" class="btn-copy" id="contactModalCopyBtn">Copy</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
@@ -432,6 +488,9 @@ function cardHtml(row, headers, metricLabel, metricValue) {
         <b>Last kilometers check:</b> ${lastCheck} km &nbsp; <b>Checked:</b> ${checkedDisplay}<br>
         <b>Next oil change:</b> ${nextOil} km
       </div>
+      <div class="bc-actions">
+        <button type="button" class="contact-btn" onclick="openContactModal(event, '${escJs(renter ? renter.name : '')}', '${escJs(row[bikeHeader])}', '${escJs(renter ? renter.contact : '')}', '${escJs(nextOil)}')">📩 Contact Customer</button>
+      </div>
     </a>
   `;
 }
@@ -589,6 +648,86 @@ searchInput.addEventListener('keydown', (e) => {
 
 document.addEventListener('click', (e) => {
   if (!searchInput.contains(e.target) && !acList.contains(e.target)) closeAc();
+});
+
+/* ---------------- Contact Customer modal ---------------- */
+
+// Prescripted message — {{nextOil}} is swapped in per record from that
+// bike's "Next oil change" figure ({{name}} / {{bike}} are also available
+// if a future wording needs them).
+const CONTACT_MESSAGE_TEMPLATE = `Hey, just a heads-up—the bike's been with you for a while, so I need a quick check. Could you send me a screenshot of the speedometer reading? I'm expecting the next oil change to be around {{nextOil}} km. Once I confirm, I'll get the oil change arranged ASAP. Thanks a lot!`;
+
+function escJs(s) {
+  return encodeURIComponent(s || '');
+}
+
+const contactModalBackdrop = document.getElementById('contactModalBackdrop');
+const contactModalMsg = document.getElementById('contactModalMsg');
+const contactModalSub = document.getElementById('contactModalSub');
+const contactModalCopyBtn = document.getElementById('contactModalCopyBtn');
+let contactModalCopyResetTimer = null;
+
+function openContactModal(event, encName, encBike, encContact, encNextOil) {
+  event.preventDefault();
+  event.stopPropagation();
+  const name = decodeURIComponent(encName || '') || 'there';
+  const bike = decodeURIComponent(encBike || '');
+  const contact = decodeURIComponent(encContact || '');
+  const nextOil = decodeURIComponent(encNextOil || '') || '—';
+  const message = CONTACT_MESSAGE_TEMPLATE
+    .replace(/\{\{name\}\}/g, name)
+    .replace(/\{\{bike\}\}/g, bike)
+    .replace(/\{\{nextOil\}\}/g, nextOil);
+  contactModalMsg.textContent = message;
+  contactModalSub.textContent = contact ? ('Contact: ' + contact) : '';
+  contactModalCopyBtn.textContent = 'Copy';
+  contactModalBackdrop.classList.add('show');
+}
+
+function closeContactModal() {
+  contactModalBackdrop.classList.remove('show');
+  clearTimeout(contactModalCopyResetTimer);
+}
+
+document.getElementById('contactModalCloseBtn').addEventListener('click', closeContactModal);
+
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
+  done();
+}
+
+contactModalCopyBtn.addEventListener('click', () => {
+  const text = contactModalMsg.textContent;
+  const done = () => {
+    contactModalCopyBtn.textContent = 'Copied!';
+    clearTimeout(contactModalCopyResetTimer);
+    contactModalCopyResetTimer = setTimeout(() => { contactModalCopyBtn.textContent = 'Copy'; }, 1500);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+});
+
+// Close only on a genuine click on the backdrop itself -- not when the
+// mousedown started inside the modal (e.g. dragging to select the message
+// text). See CLAUDE.md modal/backdrop convention.
+let contactModalMouseDownOnBackdrop = false;
+contactModalBackdrop.addEventListener('mousedown', (e) => {
+  contactModalMouseDownOnBackdrop = (e.target === contactModalBackdrop);
+});
+contactModalBackdrop.addEventListener('click', (e) => {
+  if (e.target === contactModalBackdrop && contactModalMouseDownOnBackdrop) closeContactModal();
+  contactModalMouseDownOnBackdrop = false;
 });
 
 loadParts();

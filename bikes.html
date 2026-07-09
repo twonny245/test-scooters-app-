@@ -550,11 +550,18 @@ function renterActionsHtml(renter) {
           <option value="wise">Wise</option>
           <option value="revolut">Revolut</option>
         </select>
+        <div class="extend-month-row" id="extendDepositToggleRow-${rowNumber}" style="display:none;">
+          <input type="checkbox" id="extendDepositToggle-${rowNumber}" ${isSaving ? 'disabled' : ''}>
+          <label for="extendDepositToggle-${rowNumber}">Paid from an existing deposit</label>
+        </div>
+        <select class="picker-input" id="extendDepositSelect-${rowNumber}" style="display:none;" ${isSaving ? 'disabled' : ''}>
+          <option value="">— Select —</option>
+        </select>
         <div class="extend-month-row">
           <input type="checkbox" id="extendMonthCheckbox-${rowNumber}" ${isSaving ? 'disabled' : ''}>
           <label for="extendMonthCheckbox-${rowNumber}">Extend 1 month</label>
         </div>
-        <div class="extend-note">1 month, or 30+ days, closes this booking out and starts a fresh rental record for the new period — the amount paid becomes that new record's total price.</div>
+        <div class="extend-note">1 month, or 30+ days, closes this booking out and starts a fresh rental record for the new period — the amount paid becomes that new record's total price. (The "paid from deposit" option above only applies to a short, in-place extension — not to this.)</div>
         <button class="bc-btn confirm-extend" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>${isSaving ? (savingExtendStage === 'saving' ? 'Saving…' : 'Connecting…') : 'Confirm'}</button>
         <button class="bc-btn cancel-extend" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>Cancel</button>
       </div>
@@ -768,6 +775,8 @@ document.getElementById('listBox').addEventListener('click', (e) => {
     const amountInput = document.getElementById('extendAmountInput-' + rowNumber);
     const monthCheckbox = document.getElementById('extendMonthCheckbox-' + rowNumber);
     const paidByInput = document.getElementById('extendPaidByInput-' + rowNumber);
+    const depositToggle = document.getElementById('extendDepositToggle-' + rowNumber);
+    const depositSelect = document.getElementById('extendDepositSelect-' + rowNumber);
     const extendMonth = !!(monthCheckbox && monthCheckbox.checked);
     const days = daysInput ? parseInt(daysInput.value, 10) : NaN;
     const amountRaw = amountInput ? amountInput.value.trim() : '';
@@ -777,6 +786,14 @@ document.getElementById('listBox').addEventListener('click', (e) => {
     // below in confirmExtend() as a fallback, in case the live auto-fill
     // listeners didn't get a chance to run.
     const amount = amountRaw === '' ? 0 : parseFloat(amountRaw);
+    // "Paid from an existing deposit" only applies to the short, in-place
+    // extension — it's ignored (and hidden) once a long extension is
+    // implied, since that hands off to customers.html which has its own
+    // copy of this option.
+    const isLongExtension = extendMonth || (days >= 30);
+    const paidFromDeposit = !isLongExtension && !!(depositToggle && depositToggle.checked);
+    const depositCategory = paidFromDeposit ? depositCategoryForPaidBy(paidBy) : null;
+    const depositRow = paidFromDeposit && depositSelect ? depositSelect.value : '';
     // Days aren't needed when the "Extend 1 month" checkbox is ticked —
     // the checkbox alone determines the new due date in that case.
     if (!extendMonth && (!days || days <= 0)) {
@@ -791,7 +808,11 @@ document.getElementById('listBox').addEventListener('click', (e) => {
       alert('Select how this extension was paid.');
       return;
     }
-    confirmExtend(rowNumber, days, amount, extendMonth, paidBy);
+    if (paidFromDeposit && !depositRow) {
+      alert('Select which deposit this is being paid from.');
+      return;
+    }
+    confirmExtend(rowNumber, days, amount, extendMonth, paidBy, paidFromDeposit, depositCategory, depositRow);
   }
 });
 
@@ -836,7 +857,97 @@ document.getElementById('listBox').addEventListener('change', (e) => {
   if (monthEl) {
     maybeAutofillExtendAmount(parseInt(monthEl.id.replace('extendMonthCheckbox-', ''), 10));
   }
+
+  const paidByEl = e.target.closest('[id^="extendPaidByInput-"]');
+  if (paidByEl) {
+    refreshExtendPaidFromDepositUI(parseInt(paidByEl.id.replace('extendPaidByInput-', ''), 10));
+  }
+
+  const depositToggleEl = e.target.closest('[id^="extendDepositToggle-"]');
+  if (depositToggleEl) {
+    refreshExtendPaidFromDepositUI(parseInt(depositToggleEl.id.replace('extendDepositToggle-', ''), 10));
+  }
 });
+
+// ---- "Paid from an existing deposit" for the short (in-place) extend flow.
+// Mirrors the same feature on accounts.html / customers.html: pick a
+// payment method of scan/wise/revolut on the extend form and a checkbox
+// appears letting staff draw the extension payment from an existing
+// security deposit instead of a fresh cash transaction. Only applies to
+// the short, in-place extension -- the long extension (1 month / 30+ days)
+// hands off to customers.html, which has its own copy of this feature. ----
+function money(n) {
+  if (n === '' || n === null || n === undefined || isNaN(Number(n))) return '—';
+  const num = Number(n);
+  const sign = num < 0 ? '-' : '';
+  return sign + '฿' + Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function depositCategoryForPaidBy(paidByVal) {
+  const v = (paidByVal || '').toString().trim().toLowerCase();
+  if (v === 'scan') return 'bank';
+  if (v === 'wise') return 'wise';
+  if (v === 'revolut') return 'revolut';
+  return null;
+}
+
+async function populateExtendDepositSelect(rowNumber, categoryKey) {
+  const select = document.getElementById('extendDepositSelect-' + rowNumber);
+  if (!select) return;
+  select.innerHTML = '<option value="">Loading…</option>';
+  select.disabled = true;
+  try {
+    const res = await fetch(scriptUrl + '?action=deposits').then(r => r.json());
+    // The row may have been collapsed/re-rendered while this fetch was in
+    // flight (extend cancelled, another row opened) -- bail out quietly.
+    if (openExtendRowNumber !== rowNumber || !document.getElementById('extendDepositSelect-' + rowNumber)) return;
+    if (!res.success) {
+      select.innerHTML = '<option value="">— Could not load deposits —</option>';
+      return;
+    }
+    const matches = (res.deposits || []).filter(d => d.category === categoryKey);
+    if (!matches.length) {
+      select.innerHTML = '<option value="">— No deposits available —</option>';
+      return;
+    }
+    select.innerHTML = '<option value="">— Select —</option>' +
+      matches.map(d => `<option value="${d.row}">${(d.name || '(no name)')} — ${money(d.amount)}</option>`).join('');
+  } catch (err) {
+    select.innerHTML = '<option value="">— Could not load deposits —</option>';
+  } finally {
+    if (openExtendRowNumber === rowNumber && document.getElementById('extendDepositSelect-' + rowNumber)) {
+      select.disabled = false;
+    }
+  }
+}
+
+function refreshExtendPaidFromDepositUI(rowNumber) {
+  const toggleRow = document.getElementById('extendDepositToggleRow-' + rowNumber);
+  const toggleCheckbox = document.getElementById('extendDepositToggle-' + rowNumber);
+  const select = document.getElementById('extendDepositSelect-' + rowNumber);
+  const paidByInput = document.getElementById('extendPaidByInput-' + rowNumber);
+  if (!toggleRow || !toggleCheckbox || !select || !paidByInput) return;
+
+  const category = depositCategoryForPaidBy(paidByInput.value);
+  if (!category) {
+    toggleRow.style.display = 'none';
+    toggleCheckbox.checked = false;
+    select.style.display = 'none';
+    select.disabled = true;
+    select.innerHTML = '<option value="">— Select —</option>';
+    return;
+  }
+
+  toggleRow.style.display = '';
+  if (toggleCheckbox.checked) {
+    select.style.display = '';
+    populateExtendDepositSelect(rowNumber, category);
+  } else {
+    select.style.display = 'none';
+    select.disabled = true;
+    select.innerHTML = '<option value="">— Select —</option>';
+  }
+}
 
 function confirmReturn(rowNumber, isoDate) {
   savingReturnRowNumber = rowNumber;
@@ -912,7 +1023,7 @@ function toIsoDate(d) {
 // off to the Customer Record form to start a brand-new rental record for
 // the extension period, prefilled from this booking's details. The
 // checkbox takes precedence over the days field if both are given.
-function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy) {
+function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy, paidFromDeposit, depositCategory, depositRow) {
   const isLongExtension = extendMonth || (daysToExtend >= 30);
 
   if (isLongExtension) {
@@ -1000,7 +1111,16 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy)
   fetch(scriptUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ action: 'extendBike', rowNumber: rowNumber, daysToExtend: daysToExtend, amountPaid: amountPaid, paidBy: paidBy })
+    body: JSON.stringify({
+      action: 'extendBike',
+      rowNumber: rowNumber,
+      daysToExtend: daysToExtend,
+      amountPaid: amountPaid,
+      paidBy: paidBy,
+      paidFromDeposit: paidFromDeposit,
+      depositCategory: depositCategory,
+      depositRow: depositRow
+    })
   })
     .then(res => res.json())
     .then(result => {

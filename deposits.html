@@ -17,6 +17,7 @@
     --line:#DED4C2;
     --muted:#5A6663;
     --ok:#2F855A;
+    --bad:#C53030;
   }
   *{box-sizing:border-box;}
   body{
@@ -42,11 +43,22 @@
   .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
 
   .page-head{ max-width:720px; margin:0 auto; padding:22px 16px 4px; }
+  .page-head-top{
+    display:flex; align-items:flex-start; justify-content:space-between;
+    gap:12px; flex-wrap:wrap;
+  }
   .page-head h1{
     font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
     color:var(--petrol); margin:0;
   }
   .page-head .sub{ color:var(--muted); font-size:13px; margin-top:6px; line-height:1.5; }
+  .btn-add-deposit{
+    flex-shrink:0; display:inline-block; background:var(--cone); color:#fff;
+    border:none; font-family:'Barlow Condensed',sans-serif; font-weight:700;
+    font-size:13px; letter-spacing:.03em; text-transform:uppercase;
+    padding:11px 18px; border-radius:10px; white-space:nowrap; cursor:pointer;
+  }
+  .btn-add-deposit:active{ transform:scale(.97); }
 
   main{ max-width:720px; margin:0 auto; padding:16px 16px 60px; }
 
@@ -91,13 +103,71 @@
     background:var(--card); border:1px solid var(--line); border-radius:9px;
     padding:10px 12px; margin-bottom:8px; font-size:13.5px;
     display:flex; align-items:center; justify-content:space-between; gap:10px;
+    cursor:pointer;
   }
+  .row:active{ transform:scale(.99); }
   .row .left{ min-width:0; }
   .row .title{ color:var(--ink); font-weight:500; }
   .row .meta{ color:var(--muted); font-size:12px; margin-top:2px; }
   .row .amt{ font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px; white-space:nowrap; color:var(--ok); }
 
   .empty-hint{ font-size:13px; color:#8A948F; padding:8px 2px; }
+
+  /* Edit/Remove modal */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(15,36,33,.45);
+    display:none; align-items:flex-end; justify-content:center; z-index:1000;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal-sheet{
+    background:var(--card); width:100%; max-width:480px;
+    border-radius:16px 16px 0 0; padding:20px 18px 24px;
+    max-height:90vh; overflow-y:auto;
+  }
+  @media (min-width:560px){
+    .modal-backdrop{ align-items:center; }
+    .modal-sheet{ border-radius:16px; }
+  }
+  .modal-sheet h3{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:20px;
+    color:var(--petrol); margin:0 0 14px;
+  }
+  .field{ margin-bottom:12px; }
+  .field label{
+    display:block; font-size:12px; font-weight:600; color:var(--muted);
+    margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em;
+  }
+  .field input, .field select{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:9px;
+    font-size:14.5px; font-family:'Inter',sans-serif; background:#FBFAF7; color:var(--ink);
+  }
+  .field input:focus, .field select:focus{ outline:none; border-color:var(--petrol-light); background:#fff; }
+  .modal-error{
+    font-size:12.5px; color:var(--bad); background:#FCEBEB; border:1px solid #F3C6C6;
+    border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none;
+  }
+  .modal-error.show{ display:block; }
+  .modal-progress{
+    font-size:12.5px; color:#2A5A8C; background:#EAF2FB; border:1px solid #BBD6F0;
+    border-radius:7px; padding:7px 10px; margin-bottom:12px; display:none; align-items:center; gap:9px;
+  }
+  .modal-progress.show{ display:flex; }
+  .modal-progress-spinner{
+    width:14px; height:14px; border:2px solid #BBD6F0; border-top-color:#2A5A8C;
+    border-radius:50%; flex-shrink:0; animation: modal-progress-spin 0.7s linear infinite;
+  }
+  @keyframes modal-progress-spin{ to{ transform:rotate(360deg); } }
+  .modal-btn-row{ display:flex; gap:10px; margin-top:16px; }
+  .modal-btn-row button{
+    flex:1; padding:13px; border:none; border-radius:10px;
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:14px;
+    letter-spacing:.03em; text-transform:uppercase; cursor:pointer;
+  }
+  .modal-btn-row button:active{ transform:scale(.98); }
+  .btn-save{ background:var(--cone); color:#fff; }
+  .btn-cancel{ background:#EFEAE0; color:var(--petrol); }
+  .btn-delete{ background:var(--bad); color:#fff; }
+  .btn-save:disabled, .btn-delete:disabled, .btn-cancel:disabled{ opacity:.6; }
 </style>
 </head>
 <body>
@@ -122,7 +192,10 @@
 </div>
 
 <div class="page-head">
-  <h1>Deposits</h1>
+  <div class="page-head-top">
+    <h1>Deposits</h1>
+    <button class="btn-add-deposit" id="addDepositBtn" type="button">+ Add Deposit</button>
+  </div>
   <div class="sub" id="pageSub">Security deposits logged into the Bank (Scan), Wise, or Revolut tables this month — grouped by category, oldest first.</div>
 </div>
 
@@ -136,6 +209,42 @@
 
   <div id="depositsByCategory"></div>
 </main>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal-sheet">
+    <h3 id="modalTitle">Edit Deposit</h3>
+    <div class="modal-error" id="modalError"></div>
+    <div class="modal-progress" id="modalProgress"><span class="modal-progress-spinner"></span><span id="modalProgressText">Connecting…</span></div>
+
+    <div class="field" id="fDepositCategoryField">
+      <label for="fDepositCategory">Deposit type</label>
+      <select id="fDepositCategory">
+        <option value="">Select…</option>
+        <option value="bank">Scan (Bank)</option>
+        <option value="wise">Wise</option>
+        <option value="revolut">Revolut</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="fDepositDate">Date</label>
+      <input type="date" id="fDepositDate">
+    </div>
+    <div class="field">
+      <label for="fDepositName">Name</label>
+      <input type="text" id="fDepositName" placeholder="Customer name">
+    </div>
+    <div class="field">
+      <label for="fDepositAmount">Amount (฿)</label>
+      <input type="number" min="0" step="any" id="fDepositAmount" placeholder="0.00">
+    </div>
+
+    <div class="modal-btn-row">
+      <button class="btn-delete" id="modalDeleteBtn" type="button">Remove deposit</button>
+      <button class="btn-cancel" id="modalCancelBtn" type="button">Cancel</button>
+      <button class="btn-save" id="modalSaveBtn" type="button">Save</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
@@ -205,7 +314,12 @@ async function loadDeposits() {
   render(res.deposits || []);
 }
 
+// Kept around (keyed by "category|row") so a row click can look up its
+// full entry without re-parsing the DOM -- used to prefill the edit modal.
+let allDeposits = [];
+
 function render(deposits) {
+  allDeposits = deposits;
   const container = document.getElementById('depositsByCategory');
 
   container.innerHTML = CATEGORIES.map(cat => {
@@ -213,7 +327,7 @@ function render(deposits) {
     const total = rows.reduce((sum, d) => sum + (typeof d.amount === 'number' ? d.amount : 0), 0);
     const rowsHtml = rows.length
       ? rows.map(d => `
-        <div class="row">
+        <div class="row" data-category="${d.category}" data-row="${d.row}">
           <div class="left">
             <div class="title">${d.name || '—'}</div>
             <div class="meta">${d.date || ''}</div>
@@ -237,6 +351,216 @@ function render(deposits) {
   const grandTotal = deposits.reduce((sum, d) => sum + (typeof d.amount === 'number' ? d.amount : 0), 0);
   document.getElementById('grandTotal').textContent = money(grandTotal);
 }
+
+// ---- Add / Edit / Remove modal ----
+// "+ Add Deposit" up top opens this same modal in add mode (pick a
+// deposit type, since there's no existing row to imply one). Clicking an
+// existing deposit row opens it in edit mode instead, to change its date,
+// name and amount, or remove it entirely (behind a confirmation prompt).
+// All three actions touch ONLY the date/amount/name cells for one row on
+// the sheet -- nothing else (running Wise/Revolut totals, income/expense
+// rows, other deposits) is read or written, matching
+// addDepositEntry/editDepositEntry/deleteDepositEntry in Code.gs.
+const modalBackdrop = document.getElementById('modalBackdrop');
+const modalTitle = document.getElementById('modalTitle');
+const modalError = document.getElementById('modalError');
+const modalProgress = document.getElementById('modalProgress');
+const modalProgressText = document.getElementById('modalProgressText');
+const modalSaveBtn = document.getElementById('modalSaveBtn');
+const modalDeleteBtn = document.getElementById('modalDeleteBtn');
+const modalCancelBtn = document.getElementById('modalCancelBtn');
+const addDepositBtn = document.getElementById('addDepositBtn');
+const fDepositCategoryField = document.getElementById('fDepositCategoryField');
+const fDepositCategory = document.getElementById('fDepositCategory');
+const fDepositDate = document.getElementById('fDepositDate');
+const fDepositName = document.getElementById('fDepositName');
+const fDepositAmount = document.getElementById('fDepositAmount');
+
+let modalMode = null; // 'add' or 'edit'
+let modalCategory = null;
+let modalRow = null;
+let modalProgressTimer = null;
+
+// dd/MM/yyyy (how the sheet stores it, and how the server returns it) <->
+// yyyy-MM-dd (what <input type="date"> needs).
+function dmyToIso(s) {
+  const m = (s || '').toString().trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return '';
+  const d = m[1].padStart(2, '0'), mo = m[2].padStart(2, '0'), y = m[3];
+  return `${y}-${mo}-${d}`;
+}
+
+function setModalError(msg) {
+  if (!msg) { modalError.classList.remove('show'); modalError.textContent = ''; return; }
+  modalError.textContent = msg;
+  modalError.classList.add('show');
+}
+
+function setModalButtonsDisabled(disabled) {
+  modalSaveBtn.disabled = disabled;
+  modalDeleteBtn.disabled = disabled;
+  modalCancelBtn.disabled = disabled;
+  fDepositCategory.disabled = disabled;
+}
+
+function startModalProgress(label) {
+  modalProgressText.textContent = label || 'Connecting…';
+  modalProgress.classList.add('show');
+  clearTimeout(modalProgressTimer);
+  modalProgressTimer = setTimeout(() => { modalProgressText.textContent = 'Saving…'; }, 500);
+}
+function stopModalProgress() {
+  clearTimeout(modalProgressTimer);
+  modalProgress.classList.remove('show');
+}
+
+function todayIso() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+}
+
+function openEditDepositModal(entry) {
+  modalMode = 'edit';
+  modalCategory = entry.category;
+  modalRow = entry.row;
+  setModalError(null);
+  modalTitle.textContent = 'Edit Deposit';
+  fDepositCategoryField.style.display = 'none';
+  modalDeleteBtn.style.display = '';
+  fDepositDate.value = dmyToIso(entry.date);
+  fDepositName.value = entry.name || '';
+  fDepositAmount.value = (typeof entry.amount === 'number') ? entry.amount : '';
+  modalBackdrop.classList.add('show');
+}
+
+function openAddDepositModal() {
+  modalMode = 'add';
+  modalCategory = null;
+  modalRow = null;
+  setModalError(null);
+  modalTitle.textContent = 'Add Deposit';
+  fDepositCategoryField.style.display = '';
+  fDepositCategory.value = '';
+  modalDeleteBtn.style.display = 'none';
+  fDepositDate.value = todayIso();
+  fDepositName.value = '';
+  fDepositAmount.value = '';
+  modalBackdrop.classList.add('show');
+}
+
+function closeDepositModal() {
+  modalBackdrop.classList.remove('show');
+  modalMode = null;
+  modalCategory = null;
+  modalRow = null;
+}
+
+document.getElementById('depositsByCategory').addEventListener('click', (e) => {
+  const rowEl = e.target.closest('.row[data-row]');
+  if (!rowEl) return;
+  const category = rowEl.dataset.category;
+  const row = Number(rowEl.dataset.row);
+  const entry = allDeposits.find(d => d.category === category && d.row === row);
+  if (entry) openEditDepositModal(entry);
+});
+
+addDepositBtn.addEventListener('click', openAddDepositModal);
+
+modalCancelBtn.addEventListener('click', closeDepositModal);
+modalBackdrop.addEventListener('click', (e) => {
+  if (e.target === modalBackdrop) closeDepositModal();
+});
+
+modalSaveBtn.addEventListener('click', async () => {
+  setModalError(null);
+  const amountRaw = fDepositAmount.value.trim();
+  const amount = amountRaw === '' ? '' : Number(amountRaw);
+
+  const isAdd = modalMode === 'add';
+  const category = isAdd ? fDepositCategory.value : modalCategory;
+
+  if (isAdd && !category) { setModalError('Select a deposit type.'); return; }
+  if (isAdd && (amountRaw === '' || isNaN(amount) || amount <= 0)) { setModalError('Enter a valid deposit amount.'); return; }
+  if (!isAdd && amountRaw !== '' && isNaN(amount)) { setModalError('Amount must be a number.'); return; }
+
+  const payload = isAdd
+    ? {
+        action: 'addDeposit',
+        category: category,
+        date: fDepositDate.value || '',
+        name: fDepositName.value.trim(),
+        amount: amount
+      }
+    : {
+        action: 'editDeposit',
+        category: modalCategory,
+        row: modalRow,
+        date: fDepositDate.value || '',
+        name: fDepositName.value.trim(),
+        amount: amount
+      };
+
+  setModalButtonsDisabled(true);
+  startModalProgress('Connecting…');
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }).then(r => r.json());
+    stopModalProgress();
+
+    if (!res.success) {
+      setModalError(res.error || 'Save failed — please try again.');
+      return;
+    }
+    closeDepositModal();
+    if (res.warning) alert('Saved, but: ' + res.warning);
+    loadDeposits();
+  } catch (err) {
+    stopModalProgress();
+    setModalError('Save failed: ' + err.message);
+  } finally {
+    setModalButtonsDisabled(false);
+  }
+});
+
+modalDeleteBtn.addEventListener('click', async () => {
+  const label = fDepositName.value.trim() || 'this deposit';
+  if (!confirm('Remove ' + label + '? This clears the date, name and amount for this deposit. This can\'t be undone.')) {
+    return;
+  }
+
+  setModalError(null);
+  const payload = {
+    action: 'deleteDeposit',
+    category: modalCategory,
+    row: modalRow
+  };
+
+  setModalButtonsDisabled(true);
+  startModalProgress('Connecting…');
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }).then(r => r.json());
+    stopModalProgress();
+
+    if (!res.success) {
+      setModalError(res.error || 'Remove failed — please try again.');
+      return;
+    }
+    closeDepositModal();
+    if (res.warning) alert('Removed, but: ' + res.warning);
+    loadDeposits();
+  } catch (err) {
+    stopModalProgress();
+    setModalError('Remove failed: ' + err.message);
+  } finally {
+    setModalButtonsDisabled(false);
+  }
+});
 
 loadDeposits();
 </script>

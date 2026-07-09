@@ -535,6 +535,25 @@ function findExactDateHeader(headers) {
   return headers.find(h => normalizeHeaderText(h) === 'date') || null;
 }
 
+// The new "Last mechanic check" column sits right before "Notes" (after
+// "horn switch"), so without this it would just get swept into the
+// combined Notes textarea as plain text. Give it its own date-picker
+// field instead, like the other date columns.
+function findMechanicCheckHeader(headers) {
+  const exactNames = ['last mechanic check', 'last mechanics check', 'mechanic check', 'mechanics check'];
+  for (const name of exactNames) {
+    const match = headers.find(h => normalizeHeaderText(h) === name);
+    if (match) return match;
+  }
+  // Loose fallback so small typos/rewording in the sheet header (wrong
+  // case, "mechanics" vs "mechanic", extra/missing words) still match --
+  // any header containing both "mechanic(s)" and "check".
+  return headers.find(h => {
+    const n = normalizeHeaderText(h);
+    return n.indexOf('mechanic') !== -1 && n.indexOf('check') !== -1;
+  }) || null;
+}
+
 function selectBike(bikeName) {
   const row = partsData.rows.find(r => r[keyHeader] === bikeName);
   if (!row) return;
@@ -559,12 +578,14 @@ function selectBike(bikeName) {
 
   const kmHeaderActual = findKmCheckHeader(headers);
   const dateHeaderActual = findExactDateHeader(headers);
+  const mechanicHeaderActual = findMechanicCheckHeader(headers);
   kmHeaderName = kmHeaderActual;
   dateHeaderName = dateHeaderActual;
 
   headers.forEach((header, i) => {
     if (i === 0) return; // skip the bike-name column itself — that's the key, shown above
-    if (i >= individualEnd) return; // handled by the Notes box below
+    const isMechanicField = mechanicHeaderActual && header === mechanicHeaderActual;
+    if (i >= individualEnd && !isMechanicField) return; // handled by the Notes box below
     const value = row[header] || '';
     const id = fieldIdFor(header, i);
     // The km reading and its check date get their own quick-update card at
@@ -578,10 +599,19 @@ function selectBike(bikeName) {
     // always shows the clearer "Last kilometers check" for this field.
     if (header === kmHeaderActual) label.textContent = 'Last kilometers check';
     else if (header === dateHeaderActual) label.textContent = 'Date checked';
+    else if (isMechanicField) label.textContent = 'Last mechanic check';
     else label.textContent = header;
     wrap.appendChild(label);
 
-    if (header.trim().toLowerCase() === 'status') {
+    if (isMechanicField) {
+      const input = document.createElement('input');
+      input.type = 'date';
+      input.id = id;
+      input.dataset.header = header;
+      input.dataset.isDate = 'true';
+      input.value = ddmmyyyyToInputValue(value);
+      wrap.appendChild(input);
+    } else if (header.trim().toLowerCase() === 'status') {
       const select = document.createElement('select');
       select.id = id;
       select.dataset.header = header;
@@ -645,9 +675,11 @@ function selectBike(bikeName) {
     moreSection.classList.remove('hidden');
   }
 
-  // Combined Notes box for every column after "horn switch"
+  // Combined Notes box for every column after "horn switch" — except
+  // "Last mechanic check", which gets its own date field above instead.
   if (notesStart !== -1 && individualEnd < headers.length) {
-    const extraHeaders = headers.slice(individualEnd);
+    const extraHeaders = headers.slice(individualEnd)
+      .filter(h => !(mechanicHeaderActual && h === mechanicHeaderActual));
     const combinedValue = extraHeaders
       .map(h => (row[h] || '').toString().trim())
       .filter(v => v)

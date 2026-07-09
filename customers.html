@@ -461,6 +461,15 @@
         <input id="depositAmount" type="number" min="0" step="1" placeholder="Deposit amount (฿)" class="hidden" style="margin-top:8px;">
       </div>
       <div class="load-status" id="depositSkipNote" style="margin-top:8px;">No deposit needed — this is a rental extension, not a new rental.</div>
+      <div id="paidFromDepositSection" class="hidden" style="margin-top:8px;">
+        <div class="deal-row">
+          <input type="checkbox" id="paidFromDepositCheckbox">
+          <label for="paidFromDepositCheckbox">Paid from an existing deposit</label>
+        </div>
+        <select id="paidFromDepositSelect" disabled style="margin-top:8px;">
+          <option value="">— Select —</option>
+        </select>
+      </div>
     </div>
 
 
@@ -622,6 +631,79 @@ function setDepositSectionVisible(visible) {
   }
 }
 
+// ---- "Paid from an existing deposit" -- the inverse of the security
+// deposit section above: only relevant when this form was prefilled by
+// the long-Extend flow (entrySource === 'extend'), since only an
+// extension has a prior deposit to draw from. A brand-new walk-in
+// customer never sees this at all. ----
+function money(n) {
+  if (n === '' || n === null || n === undefined || isNaN(Number(n))) return '—';
+  const num = Number(n);
+  const sign = num < 0 ? '-' : '';
+  return sign + '฿' + Math.abs(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function depositCategoryForPaidBy(paidByVal) {
+  const v = (paidByVal || '').toString().trim().toLowerCase();
+  if (v === 'scan') return 'bank';
+  if (v === 'wise') return 'wise';
+  if (v === 'revolut') return 'revolut';
+  return null;
+}
+async function populatePaidFromDepositSelect(categoryKey) {
+  paidFromDepositSelect.innerHTML = '<option value="">Loading…</option>';
+  paidFromDepositSelect.disabled = true;
+  try {
+    const res = await fetch(scriptUrl + '?action=deposits').then(r => r.json());
+    if (!res.success) {
+      paidFromDepositSelect.innerHTML = '<option value="">— Could not load deposits —</option>';
+      return;
+    }
+    const matches = (res.deposits || []).filter(d => d.category === categoryKey);
+    if (!matches.length) {
+      paidFromDepositSelect.innerHTML = '<option value="">— No deposits available —</option>';
+      return;
+    }
+    paidFromDepositSelect.innerHTML = '<option value="">— Select —</option>' +
+      matches.map(d => `<option value="${d.row}">${(d.name || '(no name)')} — ${money(d.amount)}</option>`).join('');
+  } catch (err) {
+    paidFromDepositSelect.innerHTML = '<option value="">— Could not load deposits —</option>';
+  } finally {
+    paidFromDepositSelect.disabled = false;
+  }
+}
+function refreshPaidFromDepositUI() {
+  if (entrySource !== 'extend') {
+    paidFromDepositCheckbox.checked = false;
+    paidFromDepositSection.classList.add('hidden');
+    paidFromDepositSelect.disabled = true;
+    return;
+  }
+  paidFromDepositSection.classList.remove('hidden');
+  const category = depositCategoryForPaidBy(document.getElementById('paidBy').value);
+  if (!category) {
+    paidFromDepositCheckbox.checked = false;
+    paidFromDepositSelect.disabled = true;
+    paidFromDepositSelect.innerHTML = '<option value="">— Select —</option>';
+    return;
+  }
+  if (paidFromDepositCheckbox.checked) {
+    paidFromDepositSelect.disabled = false;
+    populatePaidFromDepositSelect(category);
+  } else {
+    paidFromDepositSelect.disabled = true;
+  }
+}
+function setPaidFromDepositVisible(visible) {
+  if (!visible) {
+    paidFromDepositCheckbox.checked = false;
+    paidFromDepositSelect.innerHTML = '<option value="">— Select —</option>';
+    paidFromDepositSelect.disabled = true;
+    paidFromDepositSection.classList.add('hidden');
+  } else {
+    refreshPaidFromDepositUI();
+  }
+}
+
 function setDefaultsToNow() {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, '0');
@@ -670,6 +752,14 @@ depositCheckbox.addEventListener('change', () => {
 });
 depositMethod.addEventListener('change', refreshDepositAmountVisibility);
 
+const paidFromDepositCheckbox = document.getElementById('paidFromDepositCheckbox');
+const paidFromDepositSelect = document.getElementById('paidFromDepositSelect');
+const paidFromDepositSection = document.getElementById('paidFromDepositSection');
+paidFromDepositCheckbox.addEventListener('change', refreshPaidFromDepositUI);
+// Switching payment method while the section is visible refreshes which
+// deposit category (if any) the dropdown draws from.
+document.getElementById('paidBy').addEventListener('change', () => { if (entrySource === 'extend') refreshPaidFromDepositUI(); });
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   statusBox.className = 'status';
@@ -686,6 +776,14 @@ form.addEventListener('submit', async (e) => {
     setAllButtonsDisabled(false);
     submitBtn.textContent = 'Add to sheet';
     document.getElementById('totalPrice').focus();
+    return;
+  }
+
+  if (entrySource === 'extend' && paidFromDepositCheckbox.checked && !paidFromDepositSelect.value) {
+    statusBox.textContent = 'Please select which deposit this extension was paid from, or untick the checkbox.';
+    statusBox.className = 'status err';
+    setAllButtonsDisabled(false);
+    submitBtn.textContent = 'Add to sheet';
     return;
   }
 
@@ -723,6 +821,14 @@ form.addEventListener('submit', async (e) => {
     source: entrySource
   };
 
+  // Add-only, extend-only: never sent for a brand-new customer, matching
+  // the server's own isExtendSource check in Code.gs (belt and suspenders).
+  if (entrySource === 'extend' && paidFromDepositCheckbox.checked && paidFromDepositSelect.value) {
+    payload.paidFromDeposit = true;
+    payload.depositCategory = depositCategoryForPaidBy(document.getElementById('paidBy').value);
+    payload.depositRow = Number(paidFromDepositSelect.value);
+  }
+
   startSaveProgress();
   try {
     const res = await fetch(scriptUrl, {
@@ -758,6 +864,7 @@ form.addEventListener('submit', async (e) => {
       depositAmount.required = false;
       entrySource = 'direct';
       setDepositSectionVisible(true);
+      setPaidFromDepositVisible(false);
       setDefaultsToNow();
     } else {
       throw new Error(data.error || 'Unknown error');
@@ -820,6 +927,7 @@ function prefillFromQueryParams() {
   if (qp.get('source') === 'extend') {
     entrySource = 'extend';
     setDepositSectionVisible(false);
+    setPaidFromDepositVisible(true);
     statusBox.textContent = 'Prefilled from an extended rental — no deposit needed here. Check the details, then save.';
   } else {
     statusBox.textContent = 'Prefilled from an extended rental — check the details, then save.';
