@@ -6,6 +6,7 @@
 <title>Deposits — AA Scooters</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="nav.js" defer></script>
 <style>
   :root{
     --sand:#F5EFE6;
@@ -24,23 +25,6 @@
     margin:0; background:var(--sand); color:var(--ink);
     font-family:'Inter',sans-serif; min-height:100vh;
   }
-  .topbar{
-    background:var(--petrol); padding:14px 16px; display:flex;
-    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
-  }
-  .topbar .brand{ display:flex; align-items:center; gap:8px; text-decoration:none; }
-  .topbar .brand img{ width:28px; height:28px; object-fit:contain; }
-  .topbar .brand span{
-    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
-    color:#fff; letter-spacing:.02em;
-  }
-  .topbar nav{ display:flex; gap:16px; flex-wrap:wrap; }
-  .topbar nav a{
-    color:#CFE3E0; text-decoration:none; font-size:12.5px; font-weight:500;
-    padding:3px 0; border-bottom:2px solid transparent;
-  }
-  .topbar nav a:hover{ color:#fff; }
-  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
 
   .page-head{ max-width:720px; margin:0 auto; padding:22px 16px 4px; }
   .page-head-top{
@@ -98,6 +82,13 @@
   .cat-dot.bank{ background:var(--petrol); }
   .cat-dot.wise{ background:#1A56B0; }
   .cat-dot.revolut{ background:#6B21A8; }
+
+  .cat-sheet-total{
+    display:flex; gap:14px; flex-wrap:wrap;
+    font-size:11.5px; color:var(--muted); margin:-4px 0 12px;
+  }
+  .cat-sheet-total span{ white-space:nowrap; }
+  .cat-sheet-total b{ color:var(--ink); font-weight:600; }
 
   .row{
     background:var(--card); border:1px solid var(--line); border-radius:9px;
@@ -172,24 +163,7 @@
 </head>
 <body>
 
-<div class="topbar">
-  <a class="brand" href="index.html">
-    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
-    <span>AA Scooter Rental</span>
-  </a>
-  <nav>
-    <a href="index.html">Home</a>
-    <a href="customers.html">Customer Record</a>
-    <a href="pricing.html">Price Calculator</a>
-    <a href="parts.html">Parts &amp; Oil</a>
-    <a href="oilchange.html">Oil Change</a>
-    <a href="bikes.html">Bikes Status</a>
-    <a href="bikephotos.html">Bike Photos</a>
-    <a href="available-bikes.html">Available Bikes</a>
-    <a href="accounts.html">Accounts</a>
-    <a href="deposits.html" class="active">Deposits</a>
-  </nav>
-</div>
+<div id="topbar-mount"></div>
 
 <div class="page-head">
   <div class="page-head-top">
@@ -311,14 +285,20 @@ async function loadDeposits() {
     setLoadStatus(null);
   }
 
-  render(res.deposits || []);
+  render(res.deposits || [], res.summary || {});
 }
 
 // Kept around (keyed by "category|row") so a row click can look up its
 // full entry without re-parsing the DOM -- used to prefill the edit modal.
 let allDeposits = [];
 
-function render(deposits) {
+// `summary` is the sheet's own total figures per category (see
+// getDepositsData/ACCOUNTS_SUMMARY-style reads in Code.gs) -- O15/P15 for
+// Bank, R15/S15 + R16/S16 for Wise, V15/W15 + V16/W16 for Revolut. Shown
+// alongside the client-computed cat-total (sum of the visible rows above)
+// rather than replacing it, since the sheet's own total can include
+// history the visible list doesn't (or vice versa if something's off).
+function render(deposits, summary) {
   allDeposits = deposits;
   const container = document.getElementById('depositsByCategory');
 
@@ -337,12 +317,22 @@ function render(deposits) {
       `).join('')
       : '<div class="empty-hint">No ' + cat.label.toLowerCase() + ' deposits found.</div>';
 
+    const catSummary = (summary && summary[cat.key]) || {};
+    const sheetTotalHtml = [];
+    if (catSummary.total && catSummary.total.value !== null && catSummary.total.value !== undefined) {
+      sheetTotalHtml.push(`<span>${catSummary.total.label}: <b>${catSummary.total.value}</b></span>`);
+    }
+    if (catSummary.runningTotal && catSummary.runningTotal.value !== null && catSummary.runningTotal.value !== undefined) {
+      sheetTotalHtml.push(`<span>${catSummary.runningTotal.label}: <b>${catSummary.runningTotal.value}</b></span>`);
+    }
+
     return `
       <div class="cat-section">
         <div class="cat-head">
           <h2><span class="cat-dot ${cat.key}"></span>${cat.label}</h2>
           <div class="cat-total">${money(total)}</div>
         </div>
+        ${sheetTotalHtml.length ? `<div class="cat-sheet-total">${sheetTotalHtml.join('')}</div>` : ''}
         ${rowsHtml}
       </div>
     `;

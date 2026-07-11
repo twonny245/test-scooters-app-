@@ -1,0 +1,2068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contract — Intake</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="nav.js" defer></script>
+<style>
+  :root{
+    --sand:#F5EFE6;
+    --ink:#1A2421;
+    --petrol:#0F3D3E;
+    --petrol-light:#175A5B;
+    --cone:#FF6B35;
+    --card:#FFFFFF;
+    --line:#DED4C2;
+    --ok:#2F855A;
+    --err:#C53030;
+    --warn:#B7791F;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--sand);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  .page-head{
+    max-width:520px;
+    margin:0 auto;
+    padding:22px 16px 4px;
+  }
+  .page-head h1{
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:26px;
+    color:var(--petrol);
+    margin:0;
+  }
+  .page-head .sub{
+    color:var(--muted);
+    font-size:13px;
+    margin-top:6px;
+  }
+  main{
+    max-width:520px;
+    margin:0 auto;
+    padding:20px 16px 60px;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:20px;
+    margin-bottom:16px;
+  }
+  .card h2{
+    font-family:'Barlow Condensed',sans-serif;
+    font-size:15px;
+    font-weight:600;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--petrol);
+    margin:0 0 14px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2::before{
+    content:"";
+    width:7px;height:7px;
+    border-radius:50%;
+    background:var(--cone);
+    display:inline-block;
+  }
+  label{
+    display:block;
+    font-size:12.5px;
+    font-weight:500;
+    color:#5A6663;
+    margin:14px 0 5px;
+  }
+  label:first-of-type{margin-top:0;}
+  input, select{
+    width:100%;
+    padding:11px 12px;
+    border:1px solid var(--line);
+    border-radius:9px;
+    font-size:15px;
+    font-family:'Inter',sans-serif;
+    background:#FBFAF7;
+    color:var(--ink);
+    transition:border-color .15s;
+  }
+  input:focus, select:focus{
+    outline:none;
+    border-color:var(--petrol-light);
+    background:#fff;
+  }
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .row2 > div{min-width:0;}
+  button{
+    width:100%;
+    padding:15px;
+    border:none;
+    border-radius:10px;
+    background:var(--cone);
+    color:#fff;
+    font-family:'Barlow Condensed',sans-serif;
+    font-weight:700;
+    font-size:17px;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    cursor:pointer;
+    margin-top:20px;
+    transition:transform .1s, background .15s;
+  }
+  button:active{transform:scale(.98);}
+  button:disabled{background:#C9B9A8; cursor:not-allowed;}
+  .status{
+    margin-top:12px;
+    font-size:13.5px;
+    padding:10px 12px;
+    border-radius:8px;
+    display:none;
+  }
+  .status.ok{display:block; background:#E8F5EE; color:var(--ok); border:1px solid #BEE3CE;}
+  .status.err{display:block; background:#FCEBEB; color:var(--err); border:1px solid #F3C6C6;}
+  .status.warn{display:block; background:#FFF3E6; color:var(--warn); border:1px solid #F3D9B8;}
+  .status.progress{display:flex; align-items:center; gap:9px; background:#EAF2FB; color:#2A5A8C; border:1px solid #BBD6F0;}
+  .status-spinner{
+    width:14px; height:14px; border:2px solid #BBD6F0; border-top-color:#2A5A8C;
+    border-radius:50%; flex-shrink:0; animation: status-spin 0.7s linear infinite;
+  }
+  @keyframes status-spin{ to{ transform:rotate(360deg); } }
+  .odo{
+    display:flex; align-items:center; justify-content:space-between;
+    font-family:'Barlow Condensed',sans-serif;
+    font-size:12.5px; letter-spacing:.08em; text-transform:uppercase;
+    color:#7A8A86; margin-bottom:14px;
+  }
+  .odo b{color:var(--petrol); font-size:14px;}
+  .hidden{display:none;}
+
+  .tabs{
+    display:flex; gap:8px;
+    max-width:520px; margin:0 auto; padding:14px 16px 0;
+  }
+  .tab-btn{
+    width:auto; flex:1; margin-top:0;
+    background:#fff; color:var(--petrol);
+    border:1px solid var(--line);
+    padding:11px;
+    font-size:13.5px; letter-spacing:.06em;
+  }
+  .tab-btn.active{
+    background:var(--petrol); color:#fff; border-color:var(--petrol);
+  }
+
+  .field{ position:relative; }
+  .ac-list{
+    position:absolute; left:0; right:0; top:100%;
+    background:#fff; border:1px solid var(--line); border-top:none;
+    border-radius:0 0 9px 9px;
+    max-height:220px; overflow-y:auto;
+    z-index:20; display:none;
+    box-shadow:0 8px 18px rgba(15,61,62,.1);
+  }
+  .ac-list.show{ display:block; }
+  .ac-item{
+    padding:10px 12px; font-size:14px; cursor:pointer;
+    border-bottom:1px solid #F0EBE0;
+  }
+  .ac-item:last-child{ border-bottom:none; }
+  .ac-item:hover, .ac-item.hi{ background:#F5EFE6; }
+  .ac-item mark{ background:#FFE3D2; color:var(--ink); border-radius:2px; }
+
+  .results{ margin-top:10px; }
+  .result-card{
+    border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; margin-bottom:10px; background:#FBFAF7;
+  }
+  .result-card .rc-title{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700;
+    font-size:16px; color:var(--petrol); margin-bottom:4px;
+  }
+  .result-card .rc-row{
+    font-size:12.5px; color:#5A6663; line-height:1.6;
+  }
+  .result-card .rc-row b{ color:var(--ink); font-weight:600; }
+  .results-empty{
+    font-size:13px; color:#8A948F; padding:14px 2px; text-align:center;
+  }
+  .results-count{
+    font-size:12px; color:#7A8A86; margin:12px 2px 0;
+    font-family:'Barlow Condensed',sans-serif; letter-spacing:.06em; text-transform:uppercase;
+  }
+  .search-clear{
+    margin-top:14px; background:#fff; color:var(--petrol);
+    border:1px solid var(--line);
+  }
+  /* ---- Page gate: hide the tabs + form until the bikes list has
+     loaded from the spreadsheet, so nobody can start typing an entry
+     before the bike autocomplete is ready. ---- */
+  body:not(.bikes-ready) .tabs,
+  body:not(.bikes-ready) main{ display:none; }
+  .page-gate{
+    display:none;
+    max-width:520px; margin:26px auto; padding:0 16px;
+  }
+  body:not(.bikes-ready) .page-gate{ display:block; }
+  .page-gate .gate-card{
+    background:#FCEBEB; border:1px solid #F3C6C6; border-radius:14px;
+    padding:22px 20px; display:flex; align-items:center; gap:12px;
+  }
+  .page-gate .gate-msg{
+    color:#C62828; font-size:14.5px; font-weight:600; line-height:1.5;
+  }
+  .gate-spinner{
+    width:20px; height:20px; flex-shrink:0;
+    border:3px solid #F3C6C6; border-top-color:#C62828;
+    border-radius:50%; animation:gate-spin .7s linear infinite;
+  }
+  @keyframes gate-spin{ to{ transform:rotate(360deg); } }
+  .gate-retry{
+    width:auto; margin-top:0; padding:9px 16px;
+    background:#C62828; font-size:14px; display:none;
+  }
+  .page-gate.gate-error .gate-spinner{ display:none; }
+  .page-gate.gate-error .gate-retry{ display:inline-block; }
+
+  .load-status{
+    font-size:12px; color:#B36A2E; background:#FFF3E6;
+    border:1px solid #F3D9B8; border-radius:7px;
+    padding:7px 10px; margin:-4px 0 12px;
+    display:none;
+  }
+  .load-status.show{ display:block; }
+
+  /* ---- "Pending contracts" picker + Rent/Cancel confirm modals ---- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(26,36,33,.55);
+    display:none; align-items:center; justify-content:center;
+    z-index:100; padding:20px;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal-card{
+    background:#fff; border-radius:14px; max-width:480px; width:100%;
+    max-height:80vh; overflow-y:auto; padding:18px;
+  }
+  .modal-head{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .modal-head h2{
+    font-family:'Barlow Condensed',sans-serif; font-size:15px; font-weight:600;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--petrol); margin:0;
+  }
+  .modal-close{
+    width:auto; margin:0; padding:2px 8px; background:transparent;
+    color:var(--ink); font-size:22px; line-height:1; border:none; box-shadow:none;
+  }
+  .modal-close:active{ transform:none; }
+  .pending-item{ cursor:pointer; transition:background .12s, border-color .12s; }
+  .pending-item:hover{ background:#F5EFE6; border-color:var(--petrol-light); }
+  .head-btn-row{ display:flex; gap:8px; margin-top:10px; }
+  .head-btn-row button{
+    flex:1; margin-top:0; font-size:12.5px; padding:6px 10px; border-radius:8px;
+    border:1px solid var(--line); background:#fff; color:var(--muted); cursor:pointer;
+  }
+  .confirm-actions{ display:flex; gap:10px; margin-top:16px; }
+  .confirm-actions button{ margin-top:0; }
+  .confirm-rent-btn{ background:var(--ok); }
+  .confirm-cancel-btn{ background:var(--err); }
+  .confirm-back-btn{ background:#fff; color:var(--petrol); border:1px solid var(--line); }
+
+  /* ---- Search results, made clickable to edit a contract ---- */
+  .result-card.clickable{ cursor:pointer; transition:background .12s, border-color .12s; }
+  .result-card.clickable:hover{ background:#F5EFE6; border-color:var(--petrol-light); }
+  #editForm label:first-of-type{ margin-top:14px; }
+</style>
+</head>
+<body>
+
+<div id="topbar-mount"></div>
+
+<div class="page-head">
+  <h1>Contract</h1>
+  <div class="sub">Adds a row straight into the "Contract" tab</div>
+  <div class="head-btn-row">
+    <button type="button" id="fillTestDataBtn">Fill test data (Anton)</button>
+    <button type="button" id="pendingContractsBtn">Pending contracts</button>
+  </div>
+</div>
+
+<!-- "Pending contracts" picker modal -->
+<div class="modal-backdrop" id="pendingBackdrop">
+  <div class="modal-card" id="pendingCard">
+    <div class="modal-head">
+      <h2>Pending contracts</h2>
+      <button type="button" class="modal-close" id="pendingCloseBtn">&times;</button>
+    </div>
+    <div id="pendingListBox">
+      <div class="results-empty">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Rent / Cancel confirmation modal, shown after picking a pending record -->
+<div class="modal-backdrop" id="confirmBackdrop">
+  <div class="modal-card" id="confirmCard">
+    <div class="modal-head">
+      <h2>Pending contract</h2>
+      <button type="button" class="modal-close" id="confirmCloseBtn">&times;</button>
+    </div>
+    <div id="confirmDetailsBox"></div>
+    <div id="confirmPromptBox" class="results-empty" style="text-align:left; padding:8px 2px 0; display:none;"></div>
+    <div class="confirm-actions" id="confirmActionsBox"></div>
+    <div class="status" id="confirmStatusBox"></div>
+  </div>
+</div>
+
+<!-- Edit contract modal -- shown when a Search-tab result is clicked.
+     Covers every Contract-sheet field, including status. Saving only
+     ever overwrites that one Contract row -- nothing else in the app. -->
+<div class="modal-backdrop" id="editBackdrop">
+  <div class="modal-card" id="editCard">
+    <div class="modal-head">
+      <h2>Edit contract</h2>
+      <button type="button" class="modal-close" id="editCloseBtn">&times;</button>
+    </div>
+    <div class="head-btn-row" id="editViewDocsRow" style="margin-bottom:14px;">
+      <button type="button" id="editViewPdfBtn">View Contract PDF</button>
+      <button type="button" id="editViewDocBtn">View Contract Google Doc</button>
+      <button type="button" id="editViewPhotoBtn">View Photo of Passport</button>
+    </div>
+    <div class="results-empty" id="editNoDocsMsg" style="display:none; padding:0 0 14px; text-align:left;">No contract document was generated/saved for this record.</div>
+    <label for="e_passportPhotoUpload">Upload / replace photo of passport</label>
+    <div class="row2">
+      <input id="e_passportPhotoUpload" type="file" accept="image/*" style="grid-column:1;">
+      <button type="button" id="e_passportPhotoUploadBtn" style="margin-top:0;">Upload photo</button>
+    </div>
+    <div class="status" id="e_photoStatusBox" style="margin-bottom:14px;"></div>
+    <form id="editForm">
+      <label for="e_name">Name</label>
+      <input id="e_name">
+
+      <label for="e_nationality">Nationality</label>
+      <input id="e_nationality">
+
+      <label for="e_passport">Passport number</label>
+      <input id="e_passport">
+
+      <label for="e_number">Number</label>
+      <input id="e_number" type="tel">
+
+      <label for="e_contact">How to contact us</label>
+      <select id="e_contact">
+        <option value=""></option>
+        <option value="WhatsApp">WhatsApp</option>
+        <option value="Messenger">Messenger</option>
+        <option value="Phone">Phone</option>
+        <option value="Line">Line</option>
+        <option value="other">Other…</option>
+      </select>
+      <input id="e_contactOther" placeholder="Enter contact method" class="hidden" style="margin-top:8px;">
+
+      <label for="e_bikeModel">Bike model</label>
+      <input id="e_bikeModel">
+
+      <div class="row2">
+        <div>
+          <label for="e_rentingDateFrom">Renting from</label>
+          <input id="e_rentingDateFrom" type="date">
+        </div>
+        <div>
+          <label for="e_returnDate">Return date</label>
+          <input id="e_returnDate" type="date">
+        </div>
+      </div>
+      <div class="row2">
+        <div>
+          <label for="e_returnTime">Return time</label>
+          <input id="e_returnTime" type="time">
+        </div>
+        <div>
+          <label for="e_deliverToHotel">Deliver to hotel</label>
+          <select id="e_deliverToHotel">
+            <option value="">—</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <label for="e_totalPrice">Total price (฿)</label>
+          <input id="e_totalPrice" type="number" min="0" step="1">
+        </div>
+        <div>
+          <label for="e_paidBy">Paid by</label>
+          <select id="e_paidBy">
+            <option value=""></option>
+            <option value="cash">Cash</option>
+            <option value="scan">Scan</option>
+            <option value="wise">Wise</option>
+            <option value="revolut">Revolut</option>
+          </select>
+        </div>
+      </div>
+
+      <label for="e_deposit">Deposit</label>
+      <select id="e_deposit">
+        <option value=""></option>
+        <option value="Scan">Scan</option>
+        <option value="Cash">Cash</option>
+        <option value="Wise">Wise</option>
+        <option value="Passport">Passport</option>
+      </select>
+      <input id="e_depositAmount" type="number" min="0" step="1" placeholder="Deposit amount (฿)" class="hidden" style="margin-top:8px;">
+
+      <label style="display:flex; align-items:center; gap:8px; margin-top:14px; cursor:pointer;">
+        <input type="checkbox" id="e_deliveryFeeApplies" style="width:auto; margin:0;">
+        Delivery fee applies
+      </label>
+      <input id="e_deliveryFee" type="number" min="0" step="1" placeholder="Delivery fee amount (฿)" class="hidden" style="margin-top:8px;">
+
+      <label for="e_status">Status</label>
+      <select id="e_status">
+        <option value="">—</option>
+        <option value="Pending">Pending</option>
+        <option value="Rented">Rented</option>
+        <option value="Returned">Returned</option>
+        <option value="Canceled">Canceled</option>
+      </select>
+
+      <button type="submit" id="editSubmitBtn">Save changes</button>
+      <div class="status" id="editStatusBox"></div>
+    </form>
+  </div>
+</div>
+
+<!-- Shown INSTEAD of the tabs + form until the bikes list has loaded
+     from the spreadsheet (see the body:not(.bikes-ready) CSS rules). -->
+<div class="page-gate" id="pageGate">
+  <div class="gate-card">
+    <div class="gate-spinner"></div>
+    <div>
+      <div class="gate-msg" id="pageGateMsg">Loading bikes from the spreadsheet…</div>
+      <button type="button" class="gate-retry" id="pageGateRetry">Try again</button>
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <button type="button" class="tab-btn active" id="tabAdd">＋ Add new</button>
+  <button type="button" class="tab-btn" id="tabSearch">🔍 Search</button>
+</div>
+
+<main>
+
+  <form id="intakeForm">
+    <div class="card">
+      <div class="odo">Session entries <b id="sessionCount">0</b></div>
+      <h2>Customer</h2>
+      <label for="name">Name</label>
+      <input id="name" required placeholder="Mr. Christian Jay Verona">
+
+      <label for="nationality">Nationality</label>
+      <div class="field">
+        <input id="nationality" placeholder="Start typing or click for the list…" autocomplete="off">
+        <div class="ac-list" data-for="nationality"></div>
+      </div>
+
+      <label for="passport">Passport number</label>
+      <input id="passport" placeholder="Optional">
+
+      <label for="passportPhoto">Photo of passport (optional)</label>
+      <input id="passportPhoto" type="file" accept="image/*">
+
+      <label for="number">Number</label>
+      <input id="number" type="tel" placeholder="e.g. 081 234 5678">
+
+      <label for="contact">How to contact us</label>
+      <select id="contact">
+        <option value=""></option>
+        <option value="WhatsApp">WhatsApp</option>
+        <option value="Messenger">Messenger</option>
+        <option value="Phone">Phone</option>
+        <option value="Line">Line</option>
+        <option value="other">Other…</option>
+      </select>
+      <input id="contactOther" placeholder="Enter contact method" class="hidden" style="margin-top:8px;">
+    </div>
+
+    <div class="card">
+      <h2>Rental</h2>
+      <label for="bikeModel">Bike model</label>
+      <div class="field">
+        <input id="bikeModel" required placeholder="GT red 2" autocomplete="off">
+        <div class="ac-list" data-for="bikeModel"></div>
+      </div>
+      <div class="load-status" id="bikeModelLoadStatus">Loading bikes…</div>
+
+      <div class="row2">
+        <div>
+          <label for="rentingDateFrom">Renting from</label>
+          <input id="rentingDateFrom" type="date" required>
+        </div>
+        <div>
+          <label for="returnDate">Return date</label>
+          <input id="returnDate" type="date" required>
+        </div>
+      </div>
+      <div class="row2">
+        <div>
+          <label for="returnTime">Return time</label>
+          <input id="returnTime" type="time">
+        </div>
+        <div>
+          <label for="deliverToHotel">Deliver to hotel</label>
+          <select id="deliverToHotel">
+            <option value="">—</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Payment</h2>
+      <div class="row2">
+        <div>
+          <label for="totalPrice">Total price (฿)</label>
+          <input id="totalPrice" type="number" min="0" step="1" placeholder="2500" required>
+        </div>
+        <div>
+          <label for="paidBy">Paid by</label>
+          <select id="paidBy">
+            <option value=""></option>
+            <option value="cash">Cash</option>
+            <option value="scan">Scan</option>
+            <option value="wise">Wise</option>
+            <option value="revolut">Revolut</option>
+          </select>
+        </div>
+      </div>
+
+      <label for="deposit">Deposit</label>
+      <select id="deposit">
+        <option value=""></option>
+        <option value="Scan">Scan</option>
+        <option value="Cash">Cash</option>
+        <option value="Wise">Wise</option>
+        <option value="Passport">Passport</option>
+      </select>
+      <input id="depositAmount" type="number" min="0" step="1" placeholder="Deposit amount (฿)" class="hidden" style="margin-top:8px;">
+
+      <label style="display:flex; align-items:center; gap:8px; margin-top:14px; cursor:pointer;">
+        <input type="checkbox" id="deliveryFeeApplies" style="width:auto; margin:0;">
+        Delivery fee applies
+      </label>
+      <input id="deliveryFee" type="number" min="0" step="1" placeholder="Delivery fee amount (฿)" class="hidden" style="margin-top:8px;">
+    </div>
+
+    <button type="submit" id="submitBtn">Add to sheet</button>
+    <div class="status" id="statusBox"></div>
+  </form>
+
+  <div id="searchView" class="hidden">
+    <div class="card">
+      <h2>Find a contract</h2>
+      <div class="load-status" id="loadStatus">Loading records…</div>
+
+      <label for="s_name">Name</label>
+      <div class="field">
+        <input id="s_name" data-key="name" autocomplete="off" placeholder="Start typing…">
+        <div class="ac-list" data-for="s_name"></div>
+      </div>
+
+      <label for="s_nationality">Nationality</label>
+      <div class="field">
+        <input id="s_nationality" data-key="nationality" autocomplete="off" placeholder="Start typing…">
+        <div class="ac-list" data-for="s_nationality"></div>
+      </div>
+
+      <label for="s_passport">Passport number</label>
+      <div class="field">
+        <input id="s_passport" data-key="passport" autocomplete="off" placeholder="Start typing…">
+        <div class="ac-list" data-for="s_passport"></div>
+      </div>
+
+      <label for="s_number">Number</label>
+      <div class="field">
+        <input id="s_number" data-key="number" autocomplete="off" placeholder="Start typing…">
+        <div class="ac-list" data-for="s_number"></div>
+      </div>
+
+      <label for="s_contact">Contact method</label>
+      <div class="field">
+        <input id="s_contact" data-key="contact" autocomplete="off" placeholder="Start typing…">
+        <div class="ac-list" data-for="s_contact"></div>
+      </div>
+
+      <label for="s_bikeModel">Bike model</label>
+      <div class="field">
+        <input id="s_bikeModel" data-key="bikeModel" autocomplete="off" placeholder="e.g. GT">
+        <div class="ac-list" data-for="s_bikeModel"></div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <label for="s_rentingDateFrom">Renting from</label>
+          <div class="field">
+            <input id="s_rentingDateFrom" data-key="rentingDateFrom" autocomplete="off" placeholder="dd/mm/yyyy">
+            <div class="ac-list" data-for="s_rentingDateFrom"></div>
+          </div>
+        </div>
+        <div>
+          <label for="s_returnDate">Return date</label>
+          <div class="field">
+            <input id="s_returnDate" data-key="returnDate" autocomplete="off" placeholder="dd/mm/yyyy">
+            <div class="ac-list" data-for="s_returnDate"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <label for="s_deliverToHotel">Deliver to hotel</label>
+          <div class="field">
+            <input id="s_deliverToHotel" data-key="deliverToHotel" autocomplete="off" placeholder="Yes / No">
+            <div class="ac-list" data-for="s_deliverToHotel"></div>
+          </div>
+        </div>
+        <div>
+          <label for="s_paidBy">Paid by</label>
+          <div class="field">
+            <input id="s_paidBy" data-key="paidBy" autocomplete="off" placeholder="cash / scan…">
+            <div class="ac-list" data-for="s_paidBy"></div>
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="search-clear" id="clearSearch">Clear fields</button>
+    </div>
+
+    <div class="card">
+      <h2>Results</h2>
+      <div class="results-count" id="resultsCount"></div>
+      <div class="results" id="resultsBox">
+        <div class="results-empty">Type into any field above to search.</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
+let sessionCount = 0;
+
+const form = document.getElementById('intakeForm');
+const statusBox = document.getElementById('statusBox');
+const submitBtn = document.getElementById('submitBtn');
+
+// Lightweight "what's happening" indicator shown while a save is in
+// flight. Apps Script doesn't give us real progress events, so this fakes
+// reasonable stages by time: "Connecting…" immediately, then "Saving…"
+// shortly after if still pending. stopSaveProgress() cancels the pending
+// stage-change timer; the caller then overwrites statusBox with the real
+// result (ok/warn/err) once the request settles.
+let saveProgressTimer = null;
+function startSaveProgress() {
+  statusBox.className = 'status progress';
+  statusBox.innerHTML = '<span class="status-spinner"></span><span>Connecting…</span>';
+  clearTimeout(saveProgressTimer);
+  saveProgressTimer = setTimeout(() => {
+    statusBox.innerHTML = '<span class="status-spinner"></span><span>Saving…</span>';
+  }, 500);
+}
+function stopSaveProgress() {
+  clearTimeout(saveProgressTimer);
+}
+
+// While a save is in flight, disable every button on the page -- not just
+// the submit button -- so a double-click (or hitting some other button
+// mid-save) can't fire off a second write and create a duplicate contract
+// row.
+function setAllButtonsDisabled(disabled) {
+  document.querySelectorAll('button').forEach(b => {
+    if (disabled) {
+      if (!b.disabled) b.dataset.reenableAfterSave = '1';
+      b.disabled = true;
+    } else if (b.dataset.reenableAfterSave) {
+      b.disabled = false;
+      delete b.dataset.reenableAfterSave;
+    }
+  });
+}
+
+function setDefaultsToNow() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const dateStr = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+  const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  document.getElementById('rentingDateFrom').value = dateStr;
+  document.getElementById('returnTime').value = timeStr;
+}
+
+const contactSelect = document.getElementById('contact');
+const contactOther = document.getElementById('contactOther');
+contactSelect.addEventListener('change', () => {
+  if (contactSelect.value === 'other') {
+    contactOther.classList.remove('hidden');
+    contactOther.required = true;
+  } else {
+    contactOther.classList.add('hidden');
+    contactOther.required = false;
+    contactOther.value = '';
+  }
+});
+
+// ---- Deposit -- Scan / Cash / Wise / Passport. An amount is required for
+// every method except Passport (nothing but the passport itself is held
+// in that case).
+const depositSelect = document.getElementById('deposit');
+const depositAmount = document.getElementById('depositAmount');
+function depositNeedsAmount() {
+  return depositSelect.value !== '' && depositSelect.value !== 'Passport';
+}
+function refreshDepositAmountVisibility() {
+  if (depositNeedsAmount()) {
+    depositAmount.classList.remove('hidden');
+    depositAmount.required = true;
+  } else {
+    depositAmount.classList.add('hidden');
+    depositAmount.required = false;
+    depositAmount.value = '';
+  }
+}
+depositSelect.addEventListener('change', refreshDepositAmountVisibility);
+
+// ---- Delivery fee -- a plain tick box; ticking it reveals an amount
+// field, same show/hide pattern as the deposit amount above. ----
+const deliveryFeeAppliesCheckbox = document.getElementById('deliveryFeeApplies');
+const deliveryFeeInput = document.getElementById('deliveryFee');
+function refreshDeliveryFeeVisibility() {
+  if (deliveryFeeAppliesCheckbox.checked) {
+    deliveryFeeInput.classList.remove('hidden');
+    deliveryFeeInput.required = true;
+  } else {
+    deliveryFeeInput.classList.add('hidden');
+    deliveryFeeInput.required = false;
+    deliveryFeeInput.value = '';
+  }
+}
+deliveryFeeAppliesCheckbox.addEventListener('change', refreshDeliveryFeeVisibility);
+
+// ---- Testing helper only -- prefills the Add form with the same test
+// row used earlier (Anton / Yamaha GT (Black 2)) so the auto-generated
+// contract document feature can be tried out without retyping every
+// field by hand. Never touches the sheet by itself -- still needs the
+// normal "Add to sheet" click to actually submit. ----
+document.getElementById('fillTestDataBtn').addEventListener('click', () => {
+  document.getElementById('name').value = 'Anton';
+  document.getElementById('nationality').value = 'Albania';
+  document.getElementById('passport').value = 'lk961971';
+  document.getElementById('number').value = '8989877';
+  contactSelect.value = 'WhatsApp';
+  document.getElementById('bikeModel').value = 'Yamaha GT (Black 2)';
+  document.getElementById('rentingDateFrom').value = '2026-07-09';
+  document.getElementById('returnDate').value = '2026-07-22';
+  document.getElementById('returnTime').value = '18:25';
+  document.getElementById('deliverToHotel').value = 'Yes';
+  document.getElementById('totalPrice').value = '3000';
+  document.getElementById('paidBy').value = 'scan';
+  depositSelect.value = 'Scan';
+  refreshDepositAmountVisibility();
+  depositAmount.value = '2000';
+  deliveryFeeAppliesCheckbox.checked = true;
+  refreshDeliveryFeeVisibility();
+  deliveryFeeInput.value = '200';
+});
+
+/* ---------------- Pending contracts picker (Rent / Cancel) ---------------- */
+
+const pendingBtn = document.getElementById('pendingContractsBtn');
+const pendingBackdrop = document.getElementById('pendingBackdrop');
+const pendingListBox = document.getElementById('pendingListBox');
+const pendingCloseBtn = document.getElementById('pendingCloseBtn');
+
+// Click-outside-to-close, guarded against mid-drag closes: only close if
+// BOTH the mousedown and the click landed on the backdrop itself (not just
+// the click), so e.g. selecting text inside the card and releasing the
+// mouse over the backdrop edge doesn't incorrectly close the modal.
+let pendingMouseDownOnBackdrop = false;
+pendingBackdrop.addEventListener('mousedown', (e) => {
+  pendingMouseDownOnBackdrop = (e.target === pendingBackdrop);
+});
+pendingBackdrop.addEventListener('click', (e) => {
+  if (e.target === pendingBackdrop && pendingMouseDownOnBackdrop) closePendingModal();
+  pendingMouseDownOnBackdrop = false;
+});
+pendingCloseBtn.addEventListener('click', closePendingModal);
+
+function openPendingModal() {
+  pendingBackdrop.classList.add('show');
+  pendingListBox.innerHTML = '<div class="results-empty">Loading…</div>';
+  // Force a fresh fetch every time the picker opens, so a just-canceled or
+  // just-rented record never lingers stale in the list.
+  sheetRows = null;
+  rowsPromise = null;
+  loadRows().then(rows => renderPendingList(rows));
+}
+function closePendingModal() {
+  pendingBackdrop.classList.remove('show');
+}
+pendingBtn.addEventListener('click', openPendingModal);
+
+function renderPendingList(rows) {
+  const pending = (rows || []).filter(r => (r.status || '').toString().trim().toLowerCase() === 'pending');
+  if (!pending.length) {
+    pendingListBox.innerHTML = '<div class="results-empty">No pending contracts.</div>';
+    return;
+  }
+  pendingListBox.innerHTML = pending.map((r, i) => `
+    <div class="result-card pending-item" data-index="${i}">
+      <div class="rc-title">${r.name || '—'} — ${r.bikeModel || '—'}</div>
+      <div class="rc-row"><b>Rented:</b> ${formatDateDisplay(r.rentingDateFrom)} &nbsp; <b>Return:</b> ${formatDateDisplay(r.returnDate)}</div>
+      <div class="rc-row"><b>Total:</b> ${r.totalPrice ? '฿' + r.totalPrice : '—'} &nbsp; <b>Deposit:</b> ${r.deposit || '—'}</div>
+    </div>
+  `).join('');
+  Array.from(pendingListBox.querySelectorAll('.pending-item')).forEach((el, i) => {
+    el.addEventListener('click', () => {
+      openConfirmModal(pending[i]);
+    });
+  });
+}
+
+/* ---- Rent / Cancel confirmation, shown after picking a pending record.
+   Two steps: first choose Rent (green) or Cancel (red), then a second
+   "are you sure?" prompt before anything actually happens -- Cancel
+   writes to the sheet and Rent navigates away, so neither should ever
+   fire off a single accidental click. ---- */
+
+const confirmBackdrop = document.getElementById('confirmBackdrop');
+const confirmDetailsBox = document.getElementById('confirmDetailsBox');
+const confirmPromptBox = document.getElementById('confirmPromptBox');
+const confirmActionsBox = document.getElementById('confirmActionsBox');
+const confirmCloseBtn = document.getElementById('confirmCloseBtn');
+const confirmStatusBox = document.getElementById('confirmStatusBox');
+let currentPendingRecord = null;
+let confirmStep = 'choose'; // 'choose' | 'confirmRent' | 'confirmCancel'
+
+let confirmMouseDownOnBackdrop = false;
+confirmBackdrop.addEventListener('mousedown', (e) => {
+  confirmMouseDownOnBackdrop = (e.target === confirmBackdrop);
+});
+confirmBackdrop.addEventListener('click', (e) => {
+  if (e.target === confirmBackdrop && confirmMouseDownOnBackdrop) closeConfirmModal();
+  confirmMouseDownOnBackdrop = false;
+});
+confirmCloseBtn.addEventListener('click', closeConfirmModal);
+
+function openConfirmModal(r) {
+  currentPendingRecord = r;
+  confirmStep = 'choose';
+  confirmStatusBox.className = 'status';
+  confirmStatusBox.textContent = '';
+  confirmDetailsBox.innerHTML = `
+    <div class="result-card">
+      <div class="rc-title">${r.name || '—'} — ${r.bikeModel || '—'}</div>
+      <div class="rc-row"><b>Rented:</b> ${formatDateDisplay(r.rentingDateFrom)} &nbsp; <b>Return:</b> ${formatDateDisplay(r.returnDate)}</div>
+      <div class="rc-row"><b>Total:</b> ${r.totalPrice ? '฿' + r.totalPrice : '—'} &nbsp; <b>Deposit:</b> ${r.deposit || '—'}</div>
+    </div>
+  `;
+  renderConfirmActions();
+  confirmBackdrop.classList.add('show');
+}
+function closeConfirmModal() {
+  confirmBackdrop.classList.remove('show');
+  currentPendingRecord = null;
+  confirmStep = 'choose';
+}
+
+// Rebuilds the button row (and the "are you sure" prompt text, if any) for
+// the current step. Buttons are recreated fresh each render rather than
+// reused, since both their label and what they do change between steps.
+function renderConfirmActions() {
+  const r = currentPendingRecord;
+  const custName = (r && r.name) ? r.name : 'this customer';
+
+  if (confirmStep === 'confirmRent') {
+    confirmPromptBox.style.display = 'block';
+    confirmPromptBox.textContent = 'Rent this out to ' + custName + '? This opens the Customer Record page prefilled with this contract\'s details.';
+    confirmActionsBox.innerHTML = `
+      <button type="button" class="confirm-rent-btn" id="confirmYesBtn">Yes, rent it</button>
+      <button type="button" class="confirm-back-btn" id="confirmBackBtn">Back</button>
+    `;
+    document.getElementById('confirmYesBtn').addEventListener('click', doRent);
+    document.getElementById('confirmBackBtn').addEventListener('click', () => {
+      confirmStep = 'choose';
+      renderConfirmActions();
+    });
+  } else if (confirmStep === 'confirmCancel') {
+    confirmPromptBox.style.display = 'block';
+    confirmPromptBox.textContent = 'Cancel this contract for ' + custName + '? This cannot be undone.';
+    confirmActionsBox.innerHTML = `
+      <button type="button" class="confirm-cancel-btn" id="confirmYesBtn">Yes, cancel it</button>
+      <button type="button" class="confirm-back-btn" id="confirmBackBtn">Back</button>
+    `;
+    document.getElementById('confirmYesBtn').addEventListener('click', doCancel);
+    document.getElementById('confirmBackBtn').addEventListener('click', () => {
+      confirmStep = 'choose';
+      renderConfirmActions();
+    });
+  } else {
+    confirmPromptBox.style.display = 'none';
+    confirmPromptBox.textContent = '';
+    confirmActionsBox.innerHTML = `
+      <button type="button" class="confirm-rent-btn" id="confirmRentBtn">Rent</button>
+      <button type="button" class="confirm-cancel-btn" id="confirmCancelBtn">Cancel</button>
+    `;
+    document.getElementById('confirmRentBtn').addEventListener('click', () => {
+      confirmStep = 'confirmRent';
+      renderConfirmActions();
+    });
+    document.getElementById('confirmCancelBtn').addEventListener('click', () => {
+      confirmStep = 'confirmCancel';
+      renderConfirmActions();
+    });
+  }
+}
+
+function toIsoDateForInput(str) {
+  if (!str) return '';
+  const d = parseFlexibleDate(str);
+  if (!d) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+// ---- "Yes, rent it" -- doesn't touch the sheet at all. Just hands this
+// pending record's data over to the Customer Record page as query params,
+// which its own prefillFromQueryParams() picks up. The Contract row itself
+// only flips from Pending to Rented once that customer entry is actually
+// saved there (handled server-side, matching by name + bike). ----
+function doRent() {
+  if (!currentPendingRecord) return;
+  const r = currentPendingRecord;
+  const params = new URLSearchParams();
+  if (r.name) params.set('name', r.name);
+  if (r.nationality) params.set('nationality', r.nationality);
+  if (r.passport) params.set('passport', r.passport);
+  if (r.contact) params.set('contact', r.contact);
+  if (r.bikeModel) params.set('bikeModel', r.bikeModel);
+  const isoRentingFrom = toIsoDateForInput(r.rentingDateFrom);
+  const isoReturn = toIsoDateForInput(r.returnDate);
+  if (isoRentingFrom) params.set('rentingDateFrom', isoRentingFrom);
+  if (isoReturn) params.set('returnDate', isoReturn);
+  if (r.returnTime) params.set('returnTime', r.returnTime);
+  if (r.deliverToHotel) params.set('deliverToHotel', r.deliverToHotel);
+  if (r.totalPrice) params.set('totalPrice', r.totalPrice);
+  if (r.paidBy) params.set('paidBy', r.paidBy.toString().toLowerCase());
+  if (r.deposit) params.set('deposit', r.deposit);
+  if (r.depositAmount) params.set('depositAmount', r.depositAmount);
+  window.location.href = 'customers.html?' + params.toString();
+}
+
+// ---- "Yes, cancel it" -- sets this Contract row's status to Canceled via
+// the exact rowNumber (no name/bike guessing needed, the row came straight
+// from the sheet), then refreshes the pending list behind the confirm
+// modal so the canceled record disappears from it. ----
+async function doCancel() {
+  if (!currentPendingRecord) return;
+  const r = currentPendingRecord;
+  const yesBtn = document.getElementById('confirmYesBtn');
+  const backBtn = document.getElementById('confirmBackBtn');
+  if (yesBtn) { yesBtn.disabled = true; yesBtn.textContent = 'Canceling…'; }
+  if (backBtn) backBtn.disabled = true;
+  confirmStatusBox.className = 'status';
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'cancelContract', rowNumber: r.rowNumber })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+    confirmStatusBox.textContent = 'Contract canceled.';
+    confirmStatusBox.className = 'status ok';
+    sheetRows = null;
+    rowsPromise = null;
+    await loadRows();
+    renderPendingList(sheetRows);
+    setTimeout(closeConfirmModal, 700);
+  } catch (err) {
+    confirmStatusBox.textContent = 'Could not cancel: ' + err.message;
+    confirmStatusBox.className = 'status err';
+    if (yesBtn) { yesBtn.disabled = false; yesBtn.textContent = 'Yes, cancel it'; }
+    if (backBtn) backBtn.disabled = false;
+  }
+}
+
+/* ---------------- Edit contract (Search tab, click any result) ----------------
+   Covers every Contract-sheet field, including status. Saving posts
+   action:'editContract', which ONLY overwrites that one Contract row --
+   nothing else in the app (no customer/income/cash/bikes/deposit sheets,
+   no document regeneration). ---- */
+
+const editBackdrop = document.getElementById('editBackdrop');
+const editCloseBtn = document.getElementById('editCloseBtn');
+const editForm = document.getElementById('editForm');
+const editSubmitBtn = document.getElementById('editSubmitBtn');
+const editStatusBox = document.getElementById('editStatusBox');
+let currentEditRecord = null;
+
+// Click-outside-to-close, guarded against mid-drag closes: only close if
+// BOTH the mousedown and the click landed on the backdrop itself.
+let editMouseDownOnBackdrop = false;
+editBackdrop.addEventListener('mousedown', (e) => {
+  editMouseDownOnBackdrop = (e.target === editBackdrop);
+});
+editBackdrop.addEventListener('click', (e) => {
+  if (e.target === editBackdrop && editMouseDownOnBackdrop) closeEditModal();
+  editMouseDownOnBackdrop = false;
+});
+editCloseBtn.addEventListener('click', closeEditModal);
+
+// "View Contract PDF" / "View Contract Google Doc" -- opens whichever
+// link was stored on this row back when the contract document was first
+// generated (contractDocUrl/contractPdfUrl from getContractRows). If a
+// row has no stored link yet (e.g. it was generated before those columns
+// existed), this falls back to action:'findContractDocument' on the
+// backend, which searches Drive for this customer's subfolder (by name +
+// phone) and the contract file dated to this record's rental start date
+// -- same reconstruction logic generateContractDocument itself uses to
+// decide where a NEW contract goes. Whatever is found gets cached onto
+// the record (and backfilled onto the sheet row server-side) so the next
+// click is instant.
+const editViewDocsRow = document.getElementById('editViewDocsRow');
+const editViewPdfBtn = document.getElementById('editViewPdfBtn');
+const editViewDocBtn = document.getElementById('editViewDocBtn');
+const editNoDocsMsg = document.getElementById('editNoDocsMsg');
+
+async function viewContractDocument(kind) {
+  if (!currentEditRecord) return;
+  const urlKey = kind === 'pdf' ? 'contractPdfUrl' : 'contractDocUrl';
+  const btn = kind === 'pdf' ? editViewPdfBtn : editViewDocBtn;
+
+  if (currentEditRecord[urlKey]) {
+    window.open(currentEditRecord[urlKey], '_blank', 'noopener');
+    return;
+  }
+
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+  editStatusBox.className = 'status';
+  editStatusBox.textContent = '';
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'findContractDocument',
+        rowNumber: currentEditRecord.rowNumber,
+        name: currentEditRecord.name,
+        number: currentEditRecord.number,
+        rentingDateFrom: toIsoDateForInput(currentEditRecord.rentingDateFrom)
+      })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+
+    // Cache whatever was found onto the current record, so the other
+    // button (or clicking this one again) doesn't need to search twice.
+    if (data.docUrl) currentEditRecord.contractDocUrl = data.docUrl;
+    if (data.pdfUrl) currentEditRecord.contractPdfUrl = data.pdfUrl;
+
+    const foundUrl = currentEditRecord[urlKey];
+    if (foundUrl) {
+      window.open(foundUrl, '_blank', 'noopener');
+    } else {
+      editStatusBox.textContent = 'Found this customer\'s folder, but no ' +
+        (kind === 'pdf' ? 'PDF' : 'Google Doc') + ' was in it.';
+      editStatusBox.className = 'status warn';
+    }
+  } catch (err) {
+    editStatusBox.textContent = 'Could not find the contract document: ' + err.message;
+    editStatusBox.className = 'status err';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+editViewPdfBtn.addEventListener('click', () => viewContractDocument('pdf'));
+editViewDocBtn.addEventListener('click', () => viewContractDocument('doc'));
+
+// "View Photo of Passport" -- a photo of the passport is only ever
+// attached by an explicit upload (never auto-generated), so there's no
+// Drive-search fallback here like the contract Doc/PDF buttons have -- if
+// passportPhotoUrl isn't on the record, none has been uploaded yet.
+const editViewPhotoBtn = document.getElementById('editViewPhotoBtn');
+editViewPhotoBtn.addEventListener('click', () => {
+  if (currentEditRecord && currentEditRecord.passportPhotoUrl) {
+    window.open(currentEditRecord.passportPhotoUrl, '_blank', 'noopener');
+  } else {
+    editStatusBox.textContent = 'No photo of the passport has been uploaded for this record yet.';
+    editStatusBox.className = 'status warn';
+  }
+});
+
+// ---- Upload / replace photo of passport (edit modal) -- a standalone
+// action:'uploadPassportPhoto' request, separate from editForm's Save
+// changes button, so attaching a photo doesn't require touching any of
+// the other Contract-sheet fields. Saves into the same per-customer
+// subfolder as the contract Doc/PDF (see savePassportPhoto on the
+// backend), named to match. ----
+const e_passportPhotoUpload = document.getElementById('e_passportPhotoUpload');
+const e_passportPhotoUploadBtn = document.getElementById('e_passportPhotoUploadBtn');
+const e_photoStatusBox = document.getElementById('e_photoStatusBox');
+e_passportPhotoUploadBtn.addEventListener('click', async () => {
+  if (!currentEditRecord) return;
+  const file = e_passportPhotoUpload.files && e_passportPhotoUpload.files[0];
+  if (!file) {
+    e_photoStatusBox.textContent = 'Choose a photo file first.';
+    e_photoStatusBox.className = 'status err';
+    return;
+  }
+
+  const originalText = e_passportPhotoUploadBtn.textContent;
+  e_passportPhotoUploadBtn.disabled = true;
+  e_passportPhotoUploadBtn.textContent = 'Uploading…';
+  e_photoStatusBox.className = 'status';
+  e_photoStatusBox.textContent = '';
+  try {
+    const base64 = await readFileAsBase64(file);
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'uploadPassportPhoto',
+        rowNumber: currentEditRecord.rowNumber,
+        name: currentEditRecord.name,
+        number: currentEditRecord.number,
+        rentingDateFrom: toIsoDateForInput(currentEditRecord.rentingDateFrom),
+        passportPhotoBase64: base64,
+        passportPhotoMimeType: file.type || 'image/jpeg'
+      })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+    currentEditRecord.passportPhotoUrl = data.url;
+    e_photoStatusBox.textContent = 'Photo uploaded.';
+    e_photoStatusBox.className = 'status ok';
+    e_passportPhotoUpload.value = '';
+  } catch (err) {
+    e_photoStatusBox.textContent = 'Could not upload the photo: ' + err.message;
+    e_photoStatusBox.className = 'status err';
+  } finally {
+    e_passportPhotoUploadBtn.disabled = false;
+    e_passportPhotoUploadBtn.textContent = originalText;
+  }
+});
+
+const e_contact = document.getElementById('e_contact');
+const e_contactOther = document.getElementById('e_contactOther');
+e_contact.addEventListener('change', () => {
+  if (e_contact.value === 'other') {
+    e_contactOther.classList.remove('hidden');
+  } else {
+    e_contactOther.classList.add('hidden');
+    e_contactOther.value = '';
+  }
+});
+
+const e_deposit = document.getElementById('e_deposit');
+const e_depositAmount = document.getElementById('e_depositAmount');
+function e_depositNeedsAmount() {
+  return e_deposit.value !== '' && e_deposit.value !== 'Passport';
+}
+function refreshEditDepositAmountVisibility() {
+  if (e_depositNeedsAmount()) {
+    e_depositAmount.classList.remove('hidden');
+  } else {
+    e_depositAmount.classList.add('hidden');
+    e_depositAmount.value = '';
+  }
+}
+e_deposit.addEventListener('change', refreshEditDepositAmountVisibility);
+
+const e_deliveryFeeApplies = document.getElementById('e_deliveryFeeApplies');
+const e_deliveryFee = document.getElementById('e_deliveryFee');
+function refreshEditDeliveryFeeVisibility() {
+  if (e_deliveryFeeApplies.checked) {
+    e_deliveryFee.classList.remove('hidden');
+  } else {
+    e_deliveryFee.classList.add('hidden');
+    e_deliveryFee.value = '';
+  }
+}
+e_deliveryFeeApplies.addEventListener('change', refreshEditDeliveryFeeVisibility);
+
+function openEditModal(r) {
+  currentEditRecord = r;
+  editStatusBox.className = 'status';
+  editStatusBox.textContent = '';
+
+  // Both buttons always show and stay enabled -- if this record has no
+  // stored link, clicking one triggers the findContractDocument fallback
+  // search (see viewContractDocument) rather than pre-emptively disabling
+  // anything based on what's cached right now.
+  editViewDocsRow.style.display = 'flex';
+  editViewPdfBtn.disabled = false;
+  editViewDocBtn.disabled = false;
+  editNoDocsMsg.style.display = 'none';
+
+  // Reset the photo upload control's leftover state from whatever record
+  // was open before this one.
+  e_passportPhotoUpload.value = '';
+  e_photoStatusBox.className = 'status';
+  e_photoStatusBox.textContent = '';
+
+  document.getElementById('e_name').value = r.name || '';
+  document.getElementById('e_nationality').value = r.nationality || '';
+  document.getElementById('e_passport').value = r.passport || '';
+  document.getElementById('e_number').value = r.number || '';
+
+  const contactOptions = ['WhatsApp', 'Messenger', 'Phone', 'Line'];
+  if (contactOptions.includes(r.contact)) {
+    e_contact.value = r.contact;
+    e_contactOther.classList.add('hidden');
+    e_contactOther.value = '';
+  } else if (r.contact) {
+    e_contact.value = 'other';
+    e_contactOther.classList.remove('hidden');
+    e_contactOther.value = r.contact;
+  } else {
+    e_contact.value = '';
+    e_contactOther.classList.add('hidden');
+    e_contactOther.value = '';
+  }
+
+  document.getElementById('e_bikeModel').value = r.bikeModel || '';
+  document.getElementById('e_rentingDateFrom').value = toIsoDateForInput(r.rentingDateFrom);
+  document.getElementById('e_returnDate').value = toIsoDateForInput(r.returnDate);
+  document.getElementById('e_returnTime').value = r.returnTime || '';
+  document.getElementById('e_deliverToHotel').value = r.deliverToHotel || '';
+  document.getElementById('e_totalPrice').value = r.totalPrice || '';
+
+  const paidByOptions = ['cash', 'scan', 'wise', 'revolut'];
+  const paidByLower = (r.paidBy || '').toString().toLowerCase();
+  document.getElementById('e_paidBy').value = paidByOptions.includes(paidByLower) ? paidByLower : '';
+
+  const depositOptions = ['Scan', 'Cash', 'Wise', 'Passport'];
+  e_deposit.value = depositOptions.includes(r.deposit) ? r.deposit : '';
+  refreshEditDepositAmountVisibility();
+  if (e_depositNeedsAmount()) e_depositAmount.value = r.depositAmount || '';
+
+  e_deliveryFeeApplies.checked = !!(r.deliveryFee && r.deliveryFee.toString().toLowerCase() !== 'no');
+  refreshEditDeliveryFeeVisibility();
+  if (e_deliveryFeeApplies.checked) e_deliveryFee.value = r.deliveryFee || '';
+
+  const statusOptions = ['Pending', 'Rented', 'Returned', 'Canceled'];
+  document.getElementById('e_status').value = statusOptions.includes(r.status) ? r.status : '';
+
+  editStatusBox.className = 'status';
+  editBackdrop.classList.add('show');
+}
+function closeEditModal() {
+  editBackdrop.classList.remove('show');
+  currentEditRecord = null;
+}
+
+editForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!currentEditRecord) return;
+
+  editStatusBox.className = 'status';
+  editSubmitBtn.disabled = true;
+  editSubmitBtn.textContent = 'Saving…';
+
+  const baseContact = e_contact.value === 'other' ? e_contactOther.value.trim() : e_contact.value;
+
+  const payload = {
+    action: 'editContract',
+    rowNumber: currentEditRecord.rowNumber,
+    name: document.getElementById('e_name').value.trim(),
+    nationality: document.getElementById('e_nationality').value.trim(),
+    passport: document.getElementById('e_passport').value.trim(),
+    number: document.getElementById('e_number').value.trim(),
+    contact: baseContact,
+    bikeModel: document.getElementById('e_bikeModel').value.trim(),
+    rentingDateFrom: document.getElementById('e_rentingDateFrom').value,
+    returnDate: document.getElementById('e_returnDate').value,
+    returnTime: document.getElementById('e_returnTime').value,
+    deliverToHotel: document.getElementById('e_deliverToHotel').value,
+    totalPrice: document.getElementById('e_totalPrice').value,
+    paidBy: document.getElementById('e_paidBy').value,
+    deposit: e_deposit.value,
+    depositAmount: e_depositNeedsAmount() ? e_depositAmount.value : '',
+    deliveryFeeApplies: e_deliveryFeeApplies.checked,
+    deliveryFee: e_deliveryFeeApplies.checked ? e_deliveryFee.value : '',
+    status: document.getElementById('e_status').value
+  };
+
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+    editStatusBox.textContent = data.warning ? ('Saved, but: ' + data.warning) : 'Contract updated.';
+    editStatusBox.className = data.warning ? 'status warn' : 'status ok';
+    sheetRows = null;
+    rowsPromise = null;
+    await loadRows();
+    renderResults();
+    setTimeout(closeEditModal, 700);
+  } catch (err) {
+    editStatusBox.textContent = 'Could not save: ' + err.message;
+    editStatusBox.className = 'status err';
+  } finally {
+    editSubmitBtn.disabled = false;
+    editSubmitBtn.textContent = 'Save changes';
+  }
+});
+
+// ---- Reads a File object (e.g. from a <input type="file">) as raw
+// base64 -- Apps Script's Utilities.base64Decode expects just the base64
+// payload, so the "data:image/jpeg;base64," prefix FileReader's
+// readAsDataURL produces is stripped off before resolving. ----
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result || '';
+      const commaIdx = result.indexOf(',');
+      resolve(commaIdx !== -1 ? result.slice(commaIdx + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Could not read the file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  statusBox.className = 'status';
+  setAllButtonsDisabled(true);
+  submitBtn.textContent = 'Saving…';
+
+  const totalPrice = document.getElementById('totalPrice').value;
+
+  if (totalPrice === '' || totalPrice === null || isNaN(Number(totalPrice))) {
+    statusBox.textContent = 'Please enter a total price before saving.';
+    statusBox.className = 'status err';
+    setAllButtonsDisabled(false);
+    submitBtn.textContent = 'Add to sheet';
+    document.getElementById('totalPrice').focus();
+    return;
+  }
+
+  if (depositNeedsAmount() && (depositAmount.value === '' || isNaN(Number(depositAmount.value)))) {
+    statusBox.textContent = 'Please enter a deposit amount, or switch the deposit to Passport.';
+    statusBox.className = 'status err';
+    setAllButtonsDisabled(false);
+    submitBtn.textContent = 'Add to sheet';
+    depositAmount.focus();
+    return;
+  }
+
+  if (deliveryFeeAppliesCheckbox.checked && (deliveryFeeInput.value === '' || isNaN(Number(deliveryFeeInput.value)))) {
+    statusBox.textContent = 'Please enter a delivery fee amount, or untick "Delivery fee applies".';
+    statusBox.className = 'status err';
+    setAllButtonsDisabled(false);
+    submitBtn.textContent = 'Add to sheet';
+    deliveryFeeInput.focus();
+    return;
+  }
+
+  const baseContact = contactSelect.value === 'other' ? contactOther.value.trim() : contactSelect.value;
+
+  const passportPhotoInput = document.getElementById('passportPhoto');
+  const passportPhotoFile = passportPhotoInput.files && passportPhotoInput.files[0];
+  let passportPhotoBase64 = '';
+  let passportPhotoMimeType = '';
+  if (passportPhotoFile) {
+    try {
+      passportPhotoBase64 = await readFileAsBase64(passportPhotoFile);
+      passportPhotoMimeType = passportPhotoFile.type || 'image/jpeg';
+    } catch (fileErr) {
+      statusBox.textContent = 'Could not read the photo of passport file: ' + fileErr.message;
+      statusBox.className = 'status err';
+      setAllButtonsDisabled(false);
+      submitBtn.textContent = 'Add to sheet';
+      return;
+    }
+  }
+
+  const payload = {
+    action: 'addContract',
+    name: document.getElementById('name').value.trim(),
+    nationality: document.getElementById('nationality').value.trim(),
+    passport: document.getElementById('passport').value.trim(),
+    number: document.getElementById('number').value.trim(),
+    contact: baseContact,
+    bikeModel: document.getElementById('bikeModel').value.trim(),
+    rentingDateFrom: document.getElementById('rentingDateFrom').value,
+    returnDate: document.getElementById('returnDate').value,
+    returnTime: document.getElementById('returnTime').value,
+    deliverToHotel: document.getElementById('deliverToHotel').value,
+    totalPrice: totalPrice,
+    paidBy: document.getElementById('paidBy').value,
+    deposit: depositSelect.value,
+    depositAmount: depositNeedsAmount() ? depositAmount.value : '',
+    deliveryFeeApplies: deliveryFeeAppliesCheckbox.checked,
+    deliveryFee: deliveryFeeAppliesCheckbox.checked ? deliveryFeeInput.value : '',
+    passportPhotoBase64: passportPhotoBase64,
+    passportPhotoMimeType: passportPhotoMimeType
+  };
+
+  startSaveProgress();
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    stopSaveProgress();
+    if (data.success) {
+      const docLinkHtml = data.contractPdfUrl
+        ? ' <a href="' + data.contractPdfUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open contract PDF</a>' +
+          (data.contractDocUrl ? ' · <a href="' + data.contractDocUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open Doc</a>' : '')
+        : (data.contractDocWarning ? ' (' + data.contractDocWarning + ')' : '');
+      const photoLinkHtml = data.passportPhotoUrl
+        ? ' · <a href="' + data.passportPhotoUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open photo of passport</a>'
+        : '';
+      if (data.warning) {
+        statusBox.innerHTML = 'Added — "' + payload.name + '" saved, but: ' + data.warning + docLinkHtml + photoLinkHtml;
+        statusBox.className = 'status warn';
+      } else {
+        const checksNote = data.checksTotal
+          ? ' ✓ Verified: ' + data.checksPassed + '/' + data.checksTotal + ' write-back checks passed.'
+          : '';
+        statusBox.innerHTML = 'Added — "' + payload.name + '" saved to the Contract sheet.' + checksNote + docLinkHtml + photoLinkHtml;
+        statusBox.className = data.contractPdfUrl ? 'status ok' : (data.contractDocWarning ? 'status warn' : 'status ok');
+      }
+      sessionCount++;
+      document.getElementById('sessionCount').textContent = sessionCount;
+      form.reset();
+      contactOther.classList.add('hidden');
+      contactOther.required = false;
+      refreshDepositAmountVisibility();
+      refreshDeliveryFeeVisibility();
+      setDefaultsToNow();
+      sheetRows = null;
+      rowsPromise = null;
+    } else {
+      throw new Error(data.error || 'Unknown error');
+    }
+  } catch (err) {
+    stopSaveProgress();
+    statusBox.textContent = 'Could not save: ' + err.message;
+    statusBox.className = 'status err';
+  } finally {
+    setAllButtonsDisabled(false);
+    submitBtn.textContent = 'Add to sheet';
+  }
+});
+
+setDefaultsToNow();
+
+/* ---------------- Search / autocomplete ---------------- */
+
+const tabAdd = document.getElementById('tabAdd');
+const tabSearch = document.getElementById('tabSearch');
+const searchView = document.getElementById('searchView');
+
+let sheetRows = null;      // cached rows from the sheet
+let rowsPromise = null;    // in-flight fetch
+
+const searchKeys = ['name','nationality','passport','number','contact','bikeModel',
+                     'rentingDateFrom','returnDate','deliverToHotel','paidBy'];
+
+function setLoadStatus(msg) {
+  const el = document.getElementById('loadStatus');
+  if (!msg) { el.classList.remove('show'); return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function loadRows() {
+  if (rowsPromise) return rowsPromise;
+  setLoadStatus('Loading records…');
+  rowsPromise = fetch(scriptUrl + '?action=contracts')
+    .then(res => res.json())
+    .then(data => {
+      if (!data.success) throw new Error(data.error || 'Could not load data');
+      sheetRows = data.rows;
+      setLoadStatus(null);
+      return sheetRows;
+    })
+    .catch(err => {
+      setLoadStatus('Could not load records: ' + err.message + ' — tap Search again to retry.');
+      rowsPromise = null; // allow retry
+      return [];
+    });
+  return rowsPromise;
+}
+
+// Start fetching immediately on page load, so data is likely ready
+// by the time the person switches to the Search tab.
+loadRows();
+
+// ---- Canonical bike list (from the Parts & Oil sheet) for the main
+// "Bike model" field, so staff pick from the real list instead of
+// free-typing a name that might not match. ----
+let bikeNames = [];
+let bikeNamesPromise = null;
+
+function setBikeModelLoadStatus(msg) {
+  const el = document.getElementById('bikeModelLoadStatus');
+  if (!msg) { el.classList.remove('show'); return; }
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+// ---- Page gate: the whole page (tabs + form) stays hidden behind a red
+// "Loading bikes…" card until the bikes list has actually arrived from
+// the spreadsheet. On failure the card shows the error and a "Try again"
+// button instead of leaving the page stuck. ----
+const pageGate = document.getElementById('pageGate');
+const pageGateMsg = document.getElementById('pageGateMsg');
+document.getElementById('pageGateRetry').addEventListener('click', () => {
+  pageGate.classList.remove('gate-error');
+  pageGateMsg.textContent = 'Loading bikes from the spreadsheet…';
+  loadBikeNames();
+});
+
+function loadBikeNames() {
+  if (bikeNamesPromise) return bikeNamesPromise;
+  setBikeModelLoadStatus('Loading bikes…');
+  bikeNamesPromise = fetch(scriptUrl + '?action=parts')
+    .then(res => res.json())
+    .then(data => {
+      if (!data.success) throw new Error(data.error || 'Could not load bike list');
+      const bikeHeader = data.headers[0];
+      bikeNames = data.rows
+        .map(r => (r[bikeHeader] || '').toString().trim())
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+      setBikeModelLoadStatus(null);
+      renderResults();
+      // Bikes are in -- open the page up.
+      document.body.classList.add('bikes-ready');
+      return bikeNames;
+    })
+    .catch(err => {
+      setBikeModelLoadStatus('Could not load bike list: ' + err.message);
+      if (!document.body.classList.contains('bikes-ready')) {
+        pageGate.classList.add('gate-error');
+        pageGateMsg.textContent = 'Could not load the bikes list: ' + err.message;
+      }
+      bikeNamesPromise = null;
+      return [];
+    });
+  return bikeNamesPromise;
+}
+
+loadBikeNames();
+
+function attachBikeModelAutocomplete() {
+  const input = document.getElementById('bikeModel');
+  const list = document.querySelector('.ac-list[data-for="bikeModel"]');
+  let hiIndex = -1;
+
+  function close() {
+    list.classList.remove('show');
+    list.innerHTML = '';
+    hiIndex = -1;
+  }
+
+  function open(query) {
+    const options = bikeNames.filter(v => tokenMatch(v, query)).slice(0, 8);
+    if (!query || options.length === 0) { close(); return; }
+    list.innerHTML = options.map((v, i) =>
+      `<div class="ac-item" data-index="${i}">${highlight(v, query)}</div>`
+    ).join('');
+    list.classList.add('show');
+    hiIndex = -1;
+    Array.from(list.children).forEach((el, i) => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        input.value = options[i];
+        close();
+      });
+    });
+    list._options = options;
+  }
+
+  input.addEventListener('input', () => open(input.value.trim()));
+  input.addEventListener('focus', () => open(input.value.trim()));
+
+  input.addEventListener('keydown', (e) => {
+    const items = Array.from(list.children);
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (hiIndex >= 0 && list._options) {
+        input.value = list._options[hiIndex];
+      }
+      close();
+      return;
+    }
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      hiIndex = Math.min(hiIndex + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      hiIndex = Math.max(hiIndex - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !list.contains(e.target)) close();
+  });
+}
+
+attachBikeModelAutocomplete();
+
+/* ---------------- Nationality (country) dropdown ---------------- */
+
+const COUNTRIES = [
+  'Afghanistan','Albania','Algeria','American Samoa','Andorra','Angola','Anguilla',
+  'Antigua and Barbuda','Argentina','Armenia','Aruba','Australia','Austria',
+  'Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados','Belarus','Belgium',
+  'Belize','Benin','Bermuda','Bhutan','Bolivia','Bosnia and Herzegovina',
+  'Botswana','Brazil','British Virgin Islands','Brunei','Bulgaria','Burkina Faso',
+  'Burundi','Cambodia','Cameroon','Canada','Cape Verde','Cayman Islands',
+  'Central African Republic','Chad','Chile','China','Colombia','Comoros',
+  'Congo - Brazzaville','Congo - Kinshasa','Cook Islands','Costa Rica',
+  "Côte d'Ivoire",'Croatia','Cuba','Curaçao','Cyprus','Czechia','Denmark',
+  'Djibouti','Dominica','Dominican Republic','Ecuador','Egypt','El Salvador',
+  'Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','Falkland Islands',
+  'Faroe Islands','Fiji','Finland','France','French Guiana','French Polynesia',
+  'Gabon','Gambia','Georgia','Germany','Ghana','Gibraltar','Greece','Greenland',
+  'Grenada','Guadeloupe','Guam','Guatemala','Guernsey','Guinea','Guinea-Bissau',
+  'Guyana','Haiti','Honduras','Hong Kong','Hungary','Iceland','India','Indonesia',
+  'Iran','Iraq','Ireland','Isle of Man','Israel','Italy','Jamaica','Japan',
+  'Jersey','Jordan','Kazakhstan','Kenya','Kiribati','Kosovo','Kuwait','Kyrgyzstan',
+  'Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein',
+  'Lithuania','Luxembourg','Macao','Madagascar','Malawi','Malaysia','Maldives',
+  'Mali','Malta','Marshall Islands','Martinique','Mauritania','Mauritius',
+  'Mayotte','Mexico','Micronesia','Moldova','Monaco','Mongolia','Montenegro',
+  'Montserrat','Morocco','Mozambique','Myanmar (Burma)','Namibia','Nauru',
+  'Nepal','Netherlands','New Caledonia','New Zealand','Nicaragua','Niger',
+  'Nigeria','Niue','North Korea','North Macedonia','Norway','Oman','Pakistan',
+  'Palau','Palestinian Territories','Panama','Papua New Guinea','Paraguay',
+  'Peru','Philippines','Pitcairn Islands','Poland','Portugal','Puerto Rico',
+  'Qatar','Réunion','Romania','Russia','Rwanda','Samoa','San Marino',
+  'São Tomé and Príncipe','Saudi Arabia','Senegal','Serbia','Seychelles',
+  'Sierra Leone','Singapore','Sint Maarten','Slovakia','Slovenia',
+  'Solomon Islands','Somalia','South Africa','South Korea','South Sudan',
+  'Spain','Sri Lanka','St. Kitts and Nevis','St. Lucia','St. Vincent and the Grenadines',
+  'Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan','Tajikistan',
+  'Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago',
+  'Tunisia','Turkey','Turkmenistan','Turks and Caicos Islands','Tuvalu',
+  'Uganda','Ukraine','United Arab Emirates','United Kingdom','United States',
+  'Uruguay','Uzbekistan','Vanuatu','Vatican City','Venezuela','Vietnam',
+  'Wallis and Futuna','Western Sahara','Yemen','Zambia','Zimbabwe'
+];
+
+function attachCountryAutocomplete(inputId) {
+  const input = document.getElementById(inputId);
+  const list = document.querySelector('.ac-list[data-for="' + inputId + '"]');
+  if (!input || !list) return;
+  let hiIndex = -1;
+
+  function close() {
+    list.classList.remove('show');
+    list.innerHTML = '';
+    hiIndex = -1;
+  }
+
+  function open(query) {
+    const options = (query ? COUNTRIES.filter(v => tokenMatch(v, query)) : COUNTRIES).slice(0, 60);
+    if (!options.length) { close(); return; }
+    list.innerHTML = options.map((v, i) =>
+      `<div class="ac-item" data-index="${i}">${highlight(v, query || '')}</div>`
+    ).join('');
+    list.classList.add('show');
+    hiIndex = -1;
+    Array.from(list.children).forEach((el, i) => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        input.value = options[i];
+        close();
+      });
+    });
+    list._options = options;
+  }
+
+  input.addEventListener('input', () => open(input.value.trim()));
+  input.addEventListener('focus', () => open(input.value.trim()));
+
+  input.addEventListener('keydown', (e) => {
+    const items = Array.from(list.children);
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (hiIndex >= 0 && list._options) {
+        input.value = list._options[hiIndex];
+      }
+      close();
+      return;
+    }
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      hiIndex = Math.min(hiIndex + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+      items[hiIndex] && items[hiIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      hiIndex = Math.max(hiIndex - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+      items[hiIndex] && items[hiIndex].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !list.contains(e.target)) close();
+  });
+}
+
+attachCountryAutocomplete('nationality');
+
+tabAdd.addEventListener('click', () => {
+  tabAdd.classList.add('active');
+  tabSearch.classList.remove('active');
+  form.classList.remove('hidden');
+  searchView.classList.add('hidden');
+});
+
+tabSearch.addEventListener('click', () => {
+  tabSearch.classList.add('active');
+  tabAdd.classList.remove('active');
+  form.classList.add('hidden');
+  searchView.classList.remove('hidden');
+  loadRows().then(() => renderResults());
+});
+
+// Case-insensitive, multi-word "contains all tokens" matcher
+function tokenMatch(value, query) {
+  if (!query) return true;
+  const v = (value || '').toString().toLowerCase();
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return tokens.every(t => v.includes(t));
+}
+
+function highlight(value, query) {
+  let out = String(value || '');
+  const tokens = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  tokens.forEach(t => {
+    if (!t) return;
+    const re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
+    out = out.replace(re, '<mark>$1</mark>');
+  });
+  return out;
+}
+
+function uniqueValuesFor(key) {
+  if (!sheetRows) return [];
+  const seen = new Set();
+  const out = [];
+  sheetRows.forEach(r => {
+    const v = (r[key] || '').toString().trim();
+    if (v && !seen.has(v.toLowerCase())) {
+      seen.add(v.toLowerCase());
+      out.push(v);
+    }
+  });
+  return out;
+}
+
+function getSearchValues() {
+  const vals = {};
+  searchKeys.forEach(k => {
+    vals[k] = document.getElementById('s_' + k).value.trim();
+  });
+  return vals;
+}
+
+function parseFlexibleDate(str) {
+  str = String(str).trim();
+  var slashMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashMatch) {
+    var d = parseInt(slashMatch[1], 10), m = parseInt(slashMatch[2], 10) - 1, y = parseInt(slashMatch[3], 10);
+    var dt = new Date(y, m, d);
+    if (!isNaN(dt.getTime())) return dt;
+  }
+  var dt2 = new Date(str);
+  if (!isNaN(dt2.getTime())) return dt2;
+  return null;
+}
+
+function formatDateDisplay(str) {
+  if (!str) return '—';
+  var date = parseFlexibleDate(str);
+  if (!date) return str;
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function formatTimeDisplay(str) {
+  if (!str) return '—';
+  str = String(str).trim();
+  var hmMatch = str.match(/^(\d{1,2}):(\d{2})$/);
+  var h, min;
+  if (hmMatch) {
+    h = parseInt(hmMatch[1], 10);
+    min = hmMatch[2];
+  } else {
+    var dt = new Date(str);
+    if (isNaN(dt.getTime())) return str;
+    h = dt.getHours();
+    min = String(dt.getMinutes()).padStart(2, '0');
+  }
+  var period = h >= 12 ? 'PM' : 'AM';
+  var h12 = h % 12;
+  if (h12 === 0) h12 = 12;
+  return h12 + ':' + min + ' ' + period;
+}
+
+// ---- Sort order for the Search results: Pending contracts first, then
+// Rented, then Returned, then anything else (Canceled, blank) last.
+// Anything not matching one of the three known statuses just falls into
+// the last group rather than breaking the sort. ----
+function statusSortPriority(status) {
+  const s = (status || '').toString().trim().toLowerCase();
+  if (s === 'pending') return 0;
+  if (s === 'rented') return 1;
+  if (s === 'returned') return 2;
+  return 3;
+}
+function sortByStatus(rows) {
+  // Array.prototype.sort is a stable sort in every browser this app
+  // targets, so rows sharing the same status keep their original
+  // (sheet) order relative to each other.
+  return rows.slice().sort((a, b) => statusSortPriority(a.status) - statusSortPriority(b.status));
+}
+
+function renderResults() {
+  const box = document.getElementById('resultsBox');
+  const countEl = document.getElementById('resultsCount');
+  const vals = getSearchValues();
+  const activeKeys = searchKeys.filter(k => vals[k]);
+
+  if (!sheetRows) {
+    box.innerHTML = '<div class="results-empty">Loading records…</div>';
+    countEl.textContent = '';
+    return;
+  }
+
+  // With nothing typed into any field, show every Contract-tab record
+  // (not a "type to search" placeholder) so the Pending/Rented/Returned
+  // ordering below is useful on its own, without requiring a search first.
+  const baseRows = activeKeys.length === 0
+    ? sheetRows
+    : sheetRows.filter(row => activeKeys.every(k => tokenMatch(row[k], vals[k])));
+
+  const matches = sortByStatus(baseRows);
+
+  countEl.textContent = activeKeys.length === 0
+    ? (matches.length + (matches.length === 1 ? ' contract' : ' contracts'))
+    : (matches.length + (matches.length === 1 ? ' match' : ' matches'));
+
+  if (matches.length === 0) {
+    box.innerHTML = '<div class="results-empty">No matching records.</div>';
+    return;
+  }
+
+  const pageMatches = matches.slice(0, 60);
+
+  box.innerHTML = pageMatches.map(r => `
+    <div class="result-card clickable">
+      <div class="rc-title">${highlight(r.name, vals.name)} — ${highlight(r.bikeModel, vals.bikeModel)}</div>
+      <div class="rc-row"><b>Status:</b> ${r.status || '—'}</div>
+      <div class="rc-row"><b>Nationality:</b> ${highlight(r.nationality, vals.nationality) || '—'} &nbsp; <b>Passport:</b> ${highlight(r.passport, vals.passport) || '—'}</div>
+      <div class="rc-row"><b>Number:</b> ${highlight(r.number, vals.number) || '—'} &nbsp; <b>Contact:</b> ${highlight(r.contact, vals.contact) || '—'}</div>
+      <div class="rc-row"><b>Rented:</b> ${formatDateDisplay(r.rentingDateFrom)}</div>
+      <div class="rc-row"><b>Return:</b> ${formatDateDisplay(r.returnDate)}</div>
+      <div class="rc-row"><b>Return time:</b> ${formatTimeDisplay(r.returnTime)}</div>
+      <div class="rc-row"><b>Deliver to hotel:</b> ${highlight(r.deliverToHotel, vals.deliverToHotel) || '—'} &nbsp; <b>Paid:</b> ${r.totalPrice ? '฿' + r.totalPrice : '—'} via ${highlight(r.paidBy, vals.paidBy) || '—'}</div>
+      <div class="rc-row"><b>Deposit:</b> ${r.deposit || '—'}${(r.deposit && r.deposit.toLowerCase() !== 'passport' && r.depositAmount) ? ' (฿' + r.depositAmount + ')' : ''}</div>
+      <div class="rc-row"><b>Delivery fee:</b> ${r.deliveryFee ? '฿' + r.deliveryFee : '—'}</div>
+    </div>
+  `).join('');
+
+  // Click any result to edit it -- covers every Contract-sheet field,
+  // including status. See openEditModal / the editForm submit handler.
+  Array.from(box.querySelectorAll('.result-card')).forEach((el, i) => {
+    el.addEventListener('click', () => openEditModal(pageMatches[i]));
+  });
+}
+
+function attachAutocomplete(key) {
+  const input = document.getElementById('s_' + key);
+  const list = document.querySelector('.ac-list[data-for="s_' + key + '"]');
+  let hiIndex = -1;
+
+  function close() {
+    list.classList.remove('show');
+    list.innerHTML = '';
+    hiIndex = -1;
+  }
+
+  function open(query) {
+    const options = uniqueValuesFor(key)
+      .filter(v => tokenMatch(v, query))
+      .slice(0, 8);
+    if (options.length === 0) { close(); return; }
+    list.innerHTML = options.map((v, i) =>
+      `<div class="ac-item" data-index="${i}">${highlight(v, query)}</div>`
+    ).join('');
+    list.classList.add('show');
+    hiIndex = -1;
+    Array.from(list.children).forEach((el, i) => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        input.value = options[i];
+        close();
+        renderResults();
+      });
+    });
+    list._options = options;
+  }
+
+  input.addEventListener('input', () => {
+    if (!sheetRows) return;
+    open(input.value.trim());
+    renderResults();
+  });
+
+  input.addEventListener('focus', () => {
+    if (sheetRows) open(input.value.trim());
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const items = Array.from(list.children);
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      hiIndex = Math.min(hiIndex + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      hiIndex = Math.max(hiIndex - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('hi', i === hiIndex));
+    } else if (e.key === 'Enter' && hiIndex >= 0) {
+      e.preventDefault();
+      input.value = list._options[hiIndex];
+      close();
+      renderResults();
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!input.contains(e.target) && !list.contains(e.target)) close();
+  });
+}
+
+searchKeys.forEach(attachAutocomplete);
+
+document.getElementById('clearSearch').addEventListener('click', () => {
+  searchKeys.forEach(k => document.getElementById('s_' + k).value = '');
+  renderResults();
+});
+</script>
+
+
+<script>
+/* ---- Date-in-words labels (shared across all pages) ----
+   Every <input type="date"> gets a small red label right after it that
+   writes the selected date out in words -- e.g. "8 July 2026" -- so a
+   date like 08/07 can never be misread as August 7 (American style).
+   You still pick the date in the box exactly as before; this only
+   changes what's DISPLAYED, never what's saved to the sheet. */
+(function () {
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function dateWords(iso) {
+    var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(iso || '');
+    if (!m) return '';
+    var monthIdx = parseInt(m[2], 10) - 1;
+    if (monthIdx < 0 || monthIdx > 11) return '';
+    return parseInt(m[3], 10) + ' ' + MONTHS[monthIdx] + ' ' + parseInt(m[1], 10);
+  }
+
+  function ensureLabel(inp) {
+    var el = inp.__dateWordsEl;
+    if (el && el.parentNode) return el;
+    el = document.createElement('span');
+    el.className = 'date-words-label';
+    el.style.cssText = 'display:inline-block;font-size:12.5px;font-weight:700;' +
+      'color:#C62828;margin-top:3px;margin-left:2px;line-height:1.25;white-space:nowrap;';
+    if (inp.nextSibling) {
+      inp.parentNode.insertBefore(el, inp.nextSibling);
+    } else {
+      inp.parentNode.appendChild(el);
+    }
+    inp.__dateWordsEl = el;
+    return el;
+  }
+
+  function refreshDateWordLabels() {
+    var inputs = document.querySelectorAll('input[type="date"]');
+    for (var i = 0; i < inputs.length; i++) {
+      var inp = inputs[i];
+      if (!inp.parentNode) continue;
+      var el = ensureLabel(inp);
+      var text = dateWords(inp.value);
+      if (el.textContent !== text) el.textContent = text;
+    }
+  }
+
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.type === 'date') refreshDateWordLabels();
+  }, true);
+
+  if (window.MutationObserver) {
+    new MutationObserver(refreshDateWordLabels)
+      .observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  setInterval(refreshDateWordLabels, 500);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', refreshDateWordLabels);
+  } else {
+    refreshDateWordLabels();
+  }
+})();
+</script>
+
+</body>
+</html>

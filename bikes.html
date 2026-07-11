@@ -6,6 +6,7 @@
 <title>Bikes Status — AA Scooters</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="nav.js" defer></script>
 <style>
   :root{
     --sand:#F5EFE6;
@@ -24,23 +25,6 @@
     margin:0; background:var(--sand); color:var(--ink);
     font-family:'Inter',sans-serif; min-height:100vh;
   }
-  .topbar{
-    background:var(--petrol); padding:14px 16px; display:flex;
-    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
-  }
-  .topbar .brand{ display:flex; align-items:center; gap:8px; text-decoration:none; }
-  .topbar .brand img{ width:28px; height:28px; object-fit:contain; }
-  .topbar .brand span{
-    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
-    color:#fff; letter-spacing:.02em;
-  }
-  .topbar nav{ display:flex; gap:16px; flex-wrap:wrap; }
-  .topbar nav a{
-    color:#CFE3E0; text-decoration:none; font-size:12.5px; font-weight:500;
-    padding:3px 0; border-bottom:2px solid transparent;
-  }
-  .topbar nav a:hover{ color:#fff; }
-  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
   .page-head{ max-width:520px; margin:0 auto; padding:22px 16px 4px; }
   .page-head h1{
     font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
@@ -119,7 +103,8 @@
   .due-badge.due-today{ background:#FDECEC; color:#C0392B; }
   .due-badge.overdue{ background:#C0392B; color:#fff; }
 
-  .bc-actions{ display:flex; gap:8px; margin-top:10px; }
+  .bc-actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .bc-actions .swap-btn{ flex:1 1 100%; }
   .bc-btn{
     flex:1; padding:9px 10px; border-radius:8px; border:1px solid var(--line);
     font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:13px;
@@ -151,27 +136,60 @@
   }
 
   .empty-hint{ font-size:13px; color:#8A948F; padding:14px 2px; text-align:center; }
+
+  .bc-btn.swap-btn{ background:#fff; color:var(--muted); border-style:dashed; }
+
+  /* ---- Swap Bike modal ---- */
+  .modal-backdrop{
+    display:none; position:fixed; inset:0; background:rgba(26,36,33,.55);
+    align-items:center; justify-content:center; padding:16px; z-index:50;
+  }
+  .modal-backdrop.show{ display:flex; }
+  .modal-card{
+    background:var(--card); border-radius:12px; padding:18px;
+    width:100%; max-width:420px; max-height:90vh; overflow-y:auto;
+    box-shadow:0 12px 30px rgba(15,61,62,.25);
+  }
+  .modal-title{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:20px;
+    color:var(--petrol); margin:0 0 14px;
+  }
+  .swap-section{ margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--line); }
+  .swap-section:last-of-type{ border-bottom:none; margin-bottom:6px; padding-bottom:0; }
+  .swap-section-label{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:13px;
+    letter-spacing:.05em; text-transform:uppercase; color:var(--muted); margin-bottom:6px;
+  }
+  .swap-field-label{ display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
+  .swap-input{
+    width:100%; box-sizing:border-box; padding:9px 10px; border:1px solid var(--line);
+    border-radius:8px; font-size:14px; font-family:'Inter',sans-serif;
+    background:#fff; color:var(--ink);
+  }
+  .swap-input:disabled{ background:#F0EEE7; color:var(--muted); }
+  .swap-checkbox-row{
+    display:flex; align-items:center; gap:7px; margin-top:10px;
+    font-size:13px; color:var(--ink); font-weight:500;
+  }
+  .swap-checkbox-row input[type="checkbox"]{
+    width:17px; height:17px; accent-color:var(--cone); cursor:pointer;
+  }
+  .swap-checkbox-row label{ cursor:pointer; }
+  .swap-upgrade-fields{ margin-top:4px; }
+  .swap-error{
+    font-size:12.5px; color:#C0392B; background:#FDECEC; border:1px solid #F5C6C6;
+    border-radius:7px; padding:8px 10px; margin-bottom:12px; line-height:1.4;
+  }
+  .modal-actions{ display:flex; gap:8px; margin-top:6px; }
+  .modal-actions .bc-btn{ flex:1; }
+  .bc-btn.save-swap, .bc-btn.confirm-swap-final{ background:var(--cone); color:#fff; border-color:var(--cone); }
+  .bc-btn.cancel-swap, .bc-btn.cancel-swap-confirm{ background:#fff; color:var(--muted); }
+  .swap-confirm-summary p{ font-size:14px; color:var(--ink); line-height:1.5; margin:0 0 10px; }
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <a class="brand" href="index.html">
-    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
-    <span>AA Scooter Rental</span>
-  </a>
-  <nav>
-    <a href="index.html">Home</a>
-    <a href="customers.html">Customer Record</a>
-    <a href="pricing.html">Price Calculator</a>
-    <a href="parts.html">Parts &amp; Oil</a>
-    <a href="oilchange.html">Oil Change</a>
-    <a href="bikes.html" class="active">Bikes Status</a>
-    <a href="bikephotos.html">Bike Photos</a>
-    <a href="available-bikes.html">Available Bikes</a>
-    <a href="accounts.html">Accounts</a>
-  </nav>
-</div>
+<div id="topbar-mount"></div>
 
 <div class="page-head">
   <h1>Bikes Status</h1>
@@ -188,6 +206,8 @@
   <div class="results-count" id="resultsCount"></div>
   <div id="listBox"></div>
 </main>
+
+<div id="swapModalMount"></div>
 
 <script>
 const scriptUrl = 'https://script.google.com/macros/s/AKfycbw5omvIMDORPSPzPMdzaeT7cVrBP-u38nXjmv9kxaa4CV37dcvSwpMzoRD9c1hzw5OLww/exec';
@@ -572,6 +592,7 @@ function renterActionsHtml(renter) {
     <div class="bc-actions">
       <button class="bc-btn return-btn" data-row="${rowNumber}">Return</button>
       <button class="bc-btn extend-btn" data-row="${rowNumber}">Extend</button>
+      <button class="bc-btn swap-btn" data-row="${rowNumber}">Swap Bike</button>
     </div>
   `;
 }
@@ -1144,6 +1165,350 @@ function confirmExtend(rowNumber, daysToExtend, amountPaid, extendMonth, paidBy,
       alert('Could not extend: ' + err.message);
     });
 }
+
+/* ---------------- Swap Bike ---------------- */
+
+let swapModalRowNumber = null;   // rowNumber the swap modal is open for
+let swapStep = 'edit';           // 'edit' | 'confirm'
+let swapDraft = { newBike: '', returnAmount: 0, newBikeAmount: 0 };
+let swapError = '';
+let swapSaving = false;
+let swapMouseDownOnBackdrop = false;
+
+function fmtMoney(n) {
+  const num = Number(n);
+  return (isNaN(num) ? 0 : num).toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+function paidByDisplayName(paidByVal) {
+  const v = (paidByVal || '').toString().trim().toLowerCase();
+  if (v === 'scan') return 'QR Scan';
+  if (v === 'cash') return 'Cash';
+  if (v === 'wise') return 'Wise';
+  if (v === 'revolut') return 'Revolut';
+  return paidByVal || '—';
+}
+
+// Bikes not currently rented (per the same "situation" logic as everywhere
+// else on this page), minus the bike being swapped out itself -- swapping a
+// bike for itself isn't a real option here.
+function getAvailableBikeNames(excludeName) {
+  return (bikeNames || []).filter(name => {
+    if (bikeNamesMatch(name, excludeName)) return false;
+    return !findCurrentRenter(name);
+  });
+}
+
+// Return Amount = daily rate (original total price / total rental-period
+// days) x days used so far. "Days used" counts from the rental's start
+// date up to today, with a 2pm cutoff: before 2pm, today doesn't count yet;
+// at/after 2pm, it does. Capped to [0, totalDays] so an overdue swap can't
+// produce a negative remainder. New Bike Amount is the exact remainder
+// (total - returnAmount), not separately rounded, so the two always sum
+// back to the original total without rounding drift.
+function computeSwapDefaults(renter) {
+  const total = Number(renter.totalPrice) || 0;
+  const start = parseFlexibleDate(renter.rentingDateFrom);
+  const due = parseFlexibleDate(renter.returnDate);
+
+  if (!start || !due) {
+    return { returnAmount: 0, newBikeAmount: total, totalDays: null };
+  }
+
+  const start0 = new Date(start); start0.setHours(0, 0, 0, 0);
+  const due0 = new Date(due); due0.setHours(0, 0, 0, 0);
+  const totalDays = Math.max(1, Math.round((due0 - start0) / 86400000));
+
+  const now = new Date();
+  const today0 = new Date(now); today0.setHours(0, 0, 0, 0);
+  const calendarDaysElapsed = Math.max(0, Math.round((today0 - start0) / 86400000));
+  const isAfter2pm = now.getHours() >= 14;
+  let daysUsed = calendarDaysElapsed + (isAfter2pm ? 1 : 0);
+  daysUsed = Math.min(Math.max(daysUsed, 0), totalDays);
+
+  const dailyRate = total / totalDays;
+  const returnAmount = Math.round(dailyRate * daysUsed);
+  const newBikeAmount = Math.round((total - returnAmount) * 100) / 100;
+
+  return { returnAmount, newBikeAmount, totalDays, daysUsed };
+}
+
+function openSwapModal(rowNumber) {
+  const renter = (customerRows || []).find(r => r.rowNumber === rowNumber);
+  if (!renter) {
+    alert("Could not find this booking's details — try refreshing the page.");
+    return;
+  }
+  const defaults = computeSwapDefaults(renter);
+  swapModalRowNumber = rowNumber;
+  swapStep = 'edit';
+  swapError = '';
+  swapSaving = false;
+  swapDraft = {
+    newBike: '', returnAmount: defaults.returnAmount, newBikeAmount: defaults.newBikeAmount,
+    upgradeChecked: false, additionalAmount: 0, additionalPaidBy: ''
+  };
+  renderSwapModal();
+}
+
+function closeSwapModal() {
+  swapModalRowNumber = null;
+  swapStep = 'edit';
+  swapError = '';
+  swapSaving = false;
+  renderSwapModal();
+}
+
+function swapModalHtml() {
+  if (!swapModalRowNumber) return '';
+  const renter = (customerRows || []).find(r => r.rowNumber === swapModalRowNumber);
+  if (!renter) return '';
+
+  if (swapStep === 'confirm') {
+    return `
+      <div class="modal-backdrop show" id="swapBackdrop">
+        <div class="modal-card">
+          <h2 class="modal-title">Confirm Swap</h2>
+          <div class="swap-confirm-summary">
+            <p><b>${renter.bikeModel}</b> is being returned today for <b>฿${fmtMoney(swapDraft.returnAmount)}</b>.</p>
+            <p><b>${swapDraft.newBike}</b> is being rented from today until <b>${formatDateDisplay(renter.returnDate)}</b> for <b>฿${fmtMoney(swapDraft.newBikeAmount)}</b>.</p>
+            ${swapDraft.upgradeChecked && swapDraft.additionalAmount > 0 ? `<p>Plus an additional <b>฿${fmtMoney(swapDraft.additionalAmount)}</b> upgrade fee, paid by <b>${paidByDisplayName(swapDraft.additionalPaidBy)}</b> — logged as new income this month.</p>` : ''}
+          </div>
+          <div class="modal-actions">
+            <button class="bc-btn cancel-swap-confirm" type="button" ${swapSaving ? 'disabled' : ''}>Back</button>
+            <button class="bc-btn confirm-swap-final" type="button" ${swapSaving ? 'disabled' : ''}>${swapSaving ? 'Saving…' : 'Yes, confirm'}</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const availableBikes = getAvailableBikeNames(renter.bikeModel);
+
+  return `
+    <div class="modal-backdrop show" id="swapBackdrop">
+      <div class="modal-card">
+        <h2 class="modal-title">Swap Bike</h2>
+
+        <div class="swap-section">
+          <div class="swap-section-label">Return</div>
+          <input type="text" class="swap-input" value="${renter.bikeModel}" disabled>
+          <label class="swap-field-label">Amount (฿)</label>
+          <input type="number" step="any" min="0" class="swap-input" id="swapReturnAmountInput" value="${swapDraft.returnAmount}">
+        </div>
+
+        <div class="swap-section">
+          <div class="swap-section-label">New Bike</div>
+          <input type="text" class="swap-input" id="swapNewBikeInput" list="swapBikeOptions" value="${swapDraft.newBike}" placeholder="Select a bike…" autocomplete="off">
+          <datalist id="swapBikeOptions">
+            ${availableBikes.map(b => `<option value="${b}"></option>`).join('')}
+          </datalist>
+          <label class="swap-field-label">Amount (฿)</label>
+          <input type="number" step="any" min="0" class="swap-input" id="swapNewBikeAmountInput" value="${swapDraft.newBikeAmount}">
+
+          <div class="swap-checkbox-row">
+            <input type="checkbox" id="swapUpgradeCheckbox" ${swapDraft.upgradeChecked ? 'checked' : ''}>
+            <label for="swapUpgradeCheckbox">Upgrade / additional amount</label>
+          </div>
+          <div class="swap-upgrade-fields" id="swapUpgradeFields" style="${swapDraft.upgradeChecked ? '' : 'display:none;'}">
+            <label class="swap-field-label">Additional amount (฿)</label>
+            <input type="number" step="any" min="0" class="swap-input" id="swapAdditionalAmountInput" value="${swapDraft.additionalAmount || ''}">
+            <label class="swap-field-label">Paid by</label>
+            <select class="swap-input" id="swapAdditionalPaidByInput">
+              <option value="">Paid by…</option>
+              <option value="cash" ${swapDraft.additionalPaidBy === 'cash' ? 'selected' : ''}>Cash</option>
+              <option value="scan" ${swapDraft.additionalPaidBy === 'scan' ? 'selected' : ''}>QR Scan</option>
+              <option value="wise" ${swapDraft.additionalPaidBy === 'wise' ? 'selected' : ''}>Wise</option>
+              <option value="revolut" ${swapDraft.additionalPaidBy === 'revolut' ? 'selected' : ''}>Revolut</option>
+            </select>
+          </div>
+        </div>
+
+        ${swapError ? `<div class="swap-error">${swapError}</div>` : ''}
+
+        <div class="modal-actions">
+          <button class="bc-btn cancel-swap" type="button">Cancel</button>
+          <button class="bc-btn save-swap" type="button">Save</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSwapModal() {
+  const mount = document.getElementById('swapModalMount');
+  if (mount) mount.innerHTML = swapModalHtml();
+}
+
+function attemptSwapSave() {
+  const renter = (customerRows || []).find(r => r.rowNumber === swapModalRowNumber);
+  if (!renter) { closeSwapModal(); return; }
+
+  const bikeInput = document.getElementById('swapNewBikeInput');
+  const returnInput = document.getElementById('swapReturnAmountInput');
+  const newBikeInput = document.getElementById('swapNewBikeAmountInput');
+  const upgradeCheckbox = document.getElementById('swapUpgradeCheckbox');
+  const addAmountInput = document.getElementById('swapAdditionalAmountInput');
+  const addPaidByInput = document.getElementById('swapAdditionalPaidByInput');
+  if (!bikeInput || !returnInput || !newBikeInput) return;
+
+  const typedBike = (bikeInput.value || '').trim();
+  const returnAmount = Number(returnInput.value);
+  const newBikeAmount = Number(newBikeInput.value);
+  const upgradeChecked = !!(upgradeCheckbox && upgradeCheckbox.checked);
+  const additionalAmountRaw = addAmountInput ? addAmountInput.value : '';
+  const additionalAmount = upgradeChecked ? Number(additionalAmountRaw) : 0;
+  const additionalPaidBy = upgradeChecked ? (addPaidByInput ? addPaidByInput.value : '') : '';
+
+  // Keep whatever the user typed, even if it turns out invalid below, so a
+  // failed Save doesn't wipe out their edits.
+  swapDraft = { newBike: typedBike, returnAmount, newBikeAmount, upgradeChecked, additionalAmount, additionalPaidBy };
+
+  const available = getAvailableBikeNames(renter.bikeModel);
+  const matchedBike = available.find(b => b.trim().toLowerCase() === typedBike.toLowerCase());
+
+  if (!typedBike || !matchedBike) {
+    swapError = 'Select a bike from the list of available bikes.';
+    renderSwapModal();
+    return;
+  }
+  if (returnInput.value === '' || newBikeInput.value === '' || isNaN(returnAmount) || isNaN(newBikeAmount) || returnAmount < 0 || newBikeAmount < 0) {
+    swapError = 'Enter valid amounts (0 or more) for both the return and new bike.';
+    renderSwapModal();
+    return;
+  }
+
+  const total = Number(renter.totalPrice) || 0;
+  const sum = returnAmount + newBikeAmount;
+  if (Math.abs(sum - total) > 0.01) {
+    swapError = `The two amounts must add up to the original total of ฿${fmtMoney(total)} — they currently add up to ฿${fmtMoney(sum)}.`;
+    renderSwapModal();
+    return;
+  }
+
+  // The upgrade/additional amount sits outside the balancing check above --
+  // it's new money on top, not a reallocation of what's already been paid.
+  if (upgradeChecked) {
+    if (additionalAmountRaw === '' || isNaN(additionalAmount) || additionalAmount <= 0) {
+      swapError = 'Enter a valid additional amount (more than 0), or untick the upgrade checkbox.';
+      renderSwapModal();
+      return;
+    }
+    if (!additionalPaidBy) {
+      swapError = 'Select how the additional amount was paid.';
+      renderSwapModal();
+      return;
+    }
+  }
+
+  // Normalize to the exact listed bike name/casing before sending to the server.
+  swapDraft.newBike = matchedBike;
+  swapError = '';
+  swapStep = 'confirm';
+  renderSwapModal();
+}
+
+function submitSwap() {
+  const renter = (customerRows || []).find(r => r.rowNumber === swapModalRowNumber);
+  if (!renter) { closeSwapModal(); return; }
+
+  swapSaving = true;
+  renderSwapModal();
+  setAllButtonsDisabled(true);
+
+  fetch(scriptUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({
+      action: 'swapBike',
+      rowNumber: swapModalRowNumber,
+      newBikeModel: swapDraft.newBike,
+      returnAmount: swapDraft.returnAmount,
+      newBikeAmount: swapDraft.newBikeAmount,
+      returnDate: todayIso(),
+      additionalAmount: swapDraft.upgradeChecked ? swapDraft.additionalAmount : 0,
+      additionalPaidBy: swapDraft.upgradeChecked ? swapDraft.additionalPaidBy : ''
+    })
+  })
+    .then(res => res.json())
+    .then(result => {
+      setAllButtonsDisabled(false);
+      if (!result.success) throw new Error(result.error || 'Could not save.');
+      // The swap touches two customer rows (this one closed out, plus a
+      // brand-new one for the new bike) and the bikes sheet -- simplest to
+      // just reload everything rather than try to patch the list in place.
+      if (result.warning) alert('Swapped, but: ' + result.warning);
+      closeSwapModal();
+      return loadData();
+    })
+    .catch(err => {
+      setAllButtonsDisabled(false);
+      swapSaving = false;
+      renderSwapModal();
+      alert('Could not complete the swap: ' + err.message);
+    });
+}
+
+document.addEventListener('click', (e) => {
+  const swapBtn = e.target.closest('.swap-btn');
+  if (swapBtn) {
+    openSwapModal(parseInt(swapBtn.dataset.row, 10));
+    return;
+  }
+  const cancelSwapBtn = e.target.closest('.cancel-swap');
+  if (cancelSwapBtn) {
+    closeSwapModal();
+    return;
+  }
+  const saveSwapBtn = e.target.closest('.save-swap');
+  if (saveSwapBtn) {
+    attemptSwapSave();
+    return;
+  }
+  const backSwapBtn = e.target.closest('.cancel-swap-confirm');
+  if (backSwapBtn) {
+    swapStep = 'edit';
+    swapError = '';
+    renderSwapModal();
+    return;
+  }
+  const confirmSwapBtn = e.target.closest('.confirm-swap-final');
+  if (confirmSwapBtn) {
+    submitSwap();
+    return;
+  }
+});
+
+// Toggling the "Upgrade / additional amount" checkbox just shows/hides its
+// fields directly (no renderSwapModal() call) -- re-rendering the whole
+// modal here would wipe out anything already typed into the Return/New
+// Bike amount fields, since those only get folded into swapDraft when Save
+// is actually clicked. Direct show/hide keeps in-progress edits intact,
+// same approach as the Extend form's "paid from deposit" toggle elsewhere
+// on this page.
+document.addEventListener('change', (e) => {
+  if (e.target && e.target.id === 'swapUpgradeCheckbox') {
+    swapDraft.upgradeChecked = e.target.checked;
+    const fields = document.getElementById('swapUpgradeFields');
+    if (fields) fields.style.display = e.target.checked ? '' : 'none';
+  }
+});
+
+// Close only on a genuine click on the backdrop itself -- not when the
+// mousedown started elsewhere (e.g. dragging to select text in one of the
+// amount fields) and the mouseup happens to land on the backdrop. The
+// backdrop element is recreated on every renderSwapModal() call, so this
+// listens on the (stable) mount container and checks e.target instead of
+// attaching directly to the backdrop -- same guard as accounts.html's
+// modal and bikephotos.html's lightbox, just delegated. See CLAUDE.md.
+const swapModalMount = document.getElementById('swapModalMount');
+swapModalMount.addEventListener('mousedown', (e) => {
+  swapMouseDownOnBackdrop = (e.target.id === 'swapBackdrop');
+});
+swapModalMount.addEventListener('click', (e) => {
+  if (e.target.id === 'swapBackdrop' && swapMouseDownOnBackdrop) closeSwapModal();
+  swapMouseDownOnBackdrop = false;
+});
 
 loadData();
 </script>

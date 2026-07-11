@@ -6,6 +6,7 @@
 <title>Oil Change — Priority List</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="nav.js" defer></script>
 <style>
   :root{
     --sand:#F5EFE6;
@@ -25,23 +26,6 @@
     margin:0; background:var(--sand); color:var(--ink);
     font-family:'Inter',sans-serif; min-height:100vh;
   }
-  .topbar{
-    background:var(--petrol); padding:14px 16px; display:flex;
-    align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
-  }
-  .topbar .brand{ display:flex; align-items:center; gap:8px; text-decoration:none; }
-  .topbar .brand img{ width:28px; height:28px; object-fit:contain; }
-  .topbar .brand span{
-    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:15px;
-    color:#fff; letter-spacing:.02em;
-  }
-  .topbar nav{ display:flex; gap:16px; flex-wrap:wrap; }
-  .topbar nav a{
-    color:#CFE3E0; text-decoration:none; font-size:12.5px; font-weight:500;
-    padding:3px 0; border-bottom:2px solid transparent;
-  }
-  .topbar nav a:hover{ color:#fff; }
-  .topbar nav a.active{ color:#fff; border-bottom-color:var(--cone); }
   .page-head{ max-width:520px; margin:0 auto; padding:22px 16px 4px; }
   .page-head h1{
     font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:26px;
@@ -174,23 +158,7 @@
 </head>
 <body>
 
-<div class="topbar">
-  <a class="brand" href="index.html">
-    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">
-    <span>AA Scooter Rental</span>
-  </a>
-  <nav>
-    <a href="index.html">Home</a>
-    <a href="customers.html">Customer Record</a>
-    <a href="pricing.html">Price Calculator</a>
-    <a href="parts.html">Parts &amp; Oil</a>
-    <a href="oilchange.html" class="active">Oil Change</a>
-    <a href="bikes.html">Bikes Status</a>
-    <a href="bikephotos.html">Bike Photos</a>
-    <a href="available-bikes.html">Available Bikes</a>
-    <a href="accounts.html">Accounts</a>
-  </nav>
-</div>
+<div id="topbar-mount"></div>
 
 <div class="page-head">
   <h1>Oil Change</h1>
@@ -655,7 +623,7 @@ document.addEventListener('click', (e) => {
 // Prescripted message — {{nextOil}} is swapped in per record from that
 // bike's "Next oil change" figure ({{name}} / {{bike}} are also available
 // if a future wording needs them).
-const CONTACT_MESSAGE_TEMPLATE = `Hey, just a heads-up—the bike's been with you for a while, so I need a quick check. Could you send me a screenshot of the speedometer reading? I'm expecting the next oil change to be around {{nextOil}} km. Once I confirm, I'll get the oil change arranged ASAP. Thanks a lot!`;
+const CONTACT_MESSAGE_TEMPLATE = `Hey, just a heads-up—the bike's been with you for a while, so I need a quick check. Could you send me a screenshot of the speedometer reading? I'm expecting the next oil change to be around {{nextOil}} km. Once I receive this, I'll get the oil change arranged ASAP if needed. Thanks a lot!`;
 
 function escJs(s) {
   return encodeURIComponent(s || '');

@@ -10,6 +10,15 @@ var OPERATION_SHEET_NAME = 'Operation';
 var BIKE_TAX_SHEET_NAME = 'Bike Tax';
 var BIKES_SHEET_NAME = 'bikes';
 
+// The "AA Scooters Contracts" Drive folder and its master contract
+// template Doc are NOT hardcoded here on purpose -- a hardcoded ID always
+// points at whichever Google account originally created it, which isn't
+// necessarily the account this script is deployed/running as. Instead
+// both are created lazily, the first time they're needed, by
+// getOrCreateContractsFolder() / getOrCreateContractTemplateDoc() further
+// down -- so they always end up in the same Drive account as everything
+// else this script touches.
+
 // The "bikes" sheet has a second, separate table further down tracking
 // expenses per bike per month -- same column layout as the income table
 // at the top (the header row at the very top of the sheet is frozen, so
@@ -174,6 +183,9 @@ function doPost(e) {
     if (data.action === 'closeBikeForExtend') {
       return closeBikeForExtend(data);
     }
+    if (data.action === 'swapBike') {
+      return swapBike(data);
+    }
     if (data.action === 'addExpense') {
       return addExpenseRow(data);
     }
@@ -201,6 +213,24 @@ function doPost(e) {
     if (data.action === 'addDeposit') {
       return addDepositEntry(data);
     }
+    if (data.action === 'bulkSetExpenseType') {
+      return bulkSetExpenseType(data);
+    }
+    if (data.action === 'addContract') {
+      return addContractEntry(data);
+    }
+    if (data.action === 'cancelContract') {
+      return cancelContractEntry(data);
+    }
+    if (data.action === 'editContract') {
+      return editContractEntry(data);
+    }
+    if (data.action === 'findContractDocument') {
+      return findContractDocumentEntry(data);
+    }
+    if (data.action === 'uploadPassportPhoto') {
+      return uploadPassportPhotoEntry(data);
+    }
 
     // ---- Customer-intake behavior ----
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -217,6 +247,15 @@ function doPost(e) {
     // for a normal walk-in add on this page, "Extend" when this row was
     // auto-populated by the Extend flow on Bikes Status).
     var isExtendSource = (data.source || '').toString().trim().toLowerCase() === 'extend';
+
+    // Strip any brackets out of the bike name right away -- see
+    // stripBikeNameBrackets's comment for why. Everything below (the
+    // customer row itself, the monthly income/cash rows, and the "bikes"
+    // sheet monthly-total lookup further down) now works off the
+    // bracket-free name, so a name like "Yamaha GT (Black 2)" carried over
+    // from the Contract page can no longer fail to match the "bikes"
+    // sheet's plain "Yamaha GT Black 2" row.
+    data.bikeModel = stripBikeNameBrackets(data.bikeModel);
 
     sheet.appendRow([
       Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy'),
@@ -352,6 +391,21 @@ function doPost(e) {
       Logger.log('Deposit spend warning: ' + spendErr.message);
     }
 
+    // Once this customer's rental has actually been checked in and all the
+    // above sheets updated, the matching "Pending" row on the Contract sheet
+    // (same renter name + same bike, most recent match) should flip to
+    // "Rented" -- that Contract row was only ever a draft/placeholder until
+    // the customer actually showed up and was processed here. Wrapped in its
+    // own try/catch so a problem here never breaks customer intake, which
+    // has already succeeded by this point.
+    var contractStatusWarning = null;
+    try {
+      markMatchingContractAsRented(ss, data.name, data.bikeModel);
+    } catch (contractStatusErr) {
+      contractStatusWarning = 'Contract status update: ' + contractStatusErr.message;
+      Logger.log('Contract status update warning: ' + contractStatusErr.message);
+    }
+
     var responsePayload = { success: true };
     var warnings = [];
     if (incomeSheetWarning) warnings.push(incomeSheetWarning);
@@ -360,6 +414,7 @@ function doPost(e) {
     if (securityDepositWarning) warnings.push(securityDepositWarning);
     if (depositSpendWarning) warnings.push(depositSpendWarning);
     if (bikesSheetWarning) warnings.push(bikesSheetWarning);
+    if (contractStatusWarning) warnings.push(contractStatusWarning);
 
     // Post-write verification: re-read everything this intake wrote
     // (customer row, monthly income row, cash row, bikes total, deposit
@@ -379,6 +434,1012 @@ function doPost(e) {
     return ContentService
       .createTextOutput(JSON.stringify({ success: false, error: err.message }))
       .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- action:'addContract' -- appends a new row to the "Contract" sheet
+// (the printable-contract tab that contract.html fills in, separate from
+// the "customer" accounting sheet the Customer Record page writes to).
+// Columns: A Date, B How to contact us, C Number, D Name, E Nationality,
+// F Passport Number, G Bike model, H Renting date from, I Return date,
+// J Return time, K Deliver to hotel, L total price, M Paid by, N Deposit
+// (Scan/Cash/Wise/Passport), O Deposit amount (blank when Deposit is
+// "Passport" -- nothing but the passport itself is held in that case),
+// P Delivery Fee (blank unless the Delivery Fee checkbox on contract.html
+// is ticked, in which case it's the entered amount), Q status -- written
+// as "Pending" here every time (contract.html itself never shows a
+// status field, so this is the only place it's set at creation time),
+// and later flipped to "Rented" automatically once the matching customer
+// gets checked in on the Customer Record page -- see
+// markMatchingContractAsRented, called from the customer-intake branch
+// further down. ----
+function addContractEntry(data) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Contract');
+    if (!sheet) {
+      throw new Error('Sheet named "Contract" not found in this spreadsheet.');
+    }
+
+    // Strip any brackets out of the bike name right away -- see
+    // stripBikeNameBrackets's comment for why. Everything below (the
+    // Contract row itself, the generated contract document, and later the
+    // Bikes-sheet monthly-total lookup once this customer is checked in)
+    // now works off the bracket-free name.
+    data.bikeModel = stripBikeNameBrackets(data.bikeModel);
+
+    var depositMethod = (data.deposit || '').toString().trim();
+    var depositNeedsAmount = depositMethod !== '' && depositMethod.toLowerCase() !== 'passport';
+    var depositAmount = depositNeedsAmount ? (data.depositAmount || '') : '';
+    var deliveryFee = data.deliveryFeeApplies ? (data.deliveryFee || '') : '';
+
+    sheet.appendRow([
+      Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy'),
+      data.contact || '',
+      data.number || '',
+      data.name || '',
+      data.nationality || '',
+      data.passport || '',
+      data.bikeModel || '',
+      formatIsoDateToDMY(data.rentingDateFrom),
+      formatIsoDateToDMY(data.returnDate),
+      data.returnTime || '',
+      data.deliverToHotel || '',
+      data.totalPrice || '',
+      data.paidBy || '',
+      depositMethod,
+      depositAmount,
+      deliveryFee,
+      'Pending'
+    ]);
+
+    var newRow = sheet.getLastRow();
+    var newRange = sheet.getRange(newRow, 1, 1, 20); // A..T, incl. the doc/pdf/photo link columns filled in below
+    newRange.setBorder(true, true, true, true, true, true);
+
+    // Register the key cells of the new contract row for post-write
+    // verification (re-read + compared just before responding).
+    verifyCell('Contract', newRow, 2, data.contact || '', 'contract row: how to contact us');
+    verifyCell('Contract', newRow, 3, data.number || '', 'contract row: number');
+    verifyCell('Contract', newRow, 4, data.name || '', 'contract row: name');
+    verifyCell('Contract', newRow, 5, data.nationality || '', 'contract row: nationality');
+    verifyCell('Contract', newRow, 6, data.passport || '', 'contract row: passport number');
+    verifyCell('Contract', newRow, 7, data.bikeModel || '', 'contract row: bike model');
+    verifyCell('Contract', newRow, 8, formatIsoDateToDMY(data.rentingDateFrom), 'contract row: renting-from date');
+    verifyCell('Contract', newRow, 9, formatIsoDateToDMY(data.returnDate), 'contract row: return date');
+    verifyCell('Contract', newRow, 12, data.totalPrice || '', 'contract row: total price');
+    verifyCell('Contract', newRow, 13, data.paidBy || '', 'contract row: paid by');
+    verifyCell('Contract', newRow, 14, depositMethod, 'contract row: deposit');
+    verifyCell('Contract', newRow, 15, depositAmount, 'contract row: deposit amount');
+    verifyCell('Contract', newRow, 16, deliveryFee, 'contract row: delivery fee');
+    verifyCell('Contract', newRow, 17, 'Pending', 'contract row: status');
+
+    var verification = runWriteVerification(ss);
+    var warnings = verification.problems;
+    var responsePayload = { success: true, row: newRow };
+    responsePayload.checksPassed = verification.checked - verification.failed;
+    responsePayload.checksTotal = verification.checked;
+    if (warnings.length) responsePayload.warning = warnings.join(' ');
+
+    // Auto-fill the master contract template with this row's details and
+    // save the result (Doc + PDF) into the Contracts Drive folder. Never
+    // allowed to block/fail the contract row write itself -- if it can't
+    // generate the document for any reason, the row is still saved and the
+    // response just carries a warning instead of doc/pdf links.
+    var docResult = generateContractDocument(data, depositMethod, depositAmount, deliveryFee);
+    if (docResult.success) {
+      responsePayload.contractDocUrl = docResult.docUrl;
+      responsePayload.contractPdfUrl = docResult.pdfUrl;
+      // Persist the links on the row itself (columns R/S) so they can be
+      // looked up again later -- e.g. the "View Contract PDF / Google
+      // Doc" buttons in the Search tab's edit modal -- without needing to
+      // regenerate or re-locate anything. Wrapped so a problem writing
+      // these two extra cells never turns an otherwise-successful save
+      // into a failure.
+      try {
+        sheet.getRange(newRow, 18).setValue(docResult.docUrl);
+        sheet.getRange(newRow, 19).setValue(docResult.pdfUrl);
+      } catch (linkErr) {
+        Logger.log('Could not store contract doc/pdf links on the row: ' + linkErr.message);
+      }
+    } else {
+      responsePayload.contractDocWarning = 'Contract row saved, but the contract document could not be generated: ' + docResult.error;
+    }
+
+    // If a photo of the passport was attached on the Add form, save it
+    // into the SAME per-customer subfolder as the contract Doc/PDF, named
+    // to match ("Photo of Passport - <name> - <date>" instead of
+    // "Contract - <name> - <date>"). Never allowed to block/fail the
+    // contract row write -- any problem here is just a warning alongside
+    // an otherwise-successful save.
+    if (data.passportPhotoBase64) {
+      data.rowNumber = newRow;
+      var photoResult = savePassportPhoto(data);
+      if (photoResult.success) {
+        responsePayload.passportPhotoUrl = photoResult.url;
+      } else {
+        var photoWarn = 'Photo of passport: ' + photoResult.error;
+        responsePayload.warning = responsePayload.warning ? (responsePayload.warning + ' ' + photoWarn) : photoWarn;
+      }
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify(responsePayload))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- action:'cancelContract' -- Contract page, "Pending contracts" picker,
+// "Cancel" choice. data: { rowNumber } -- the exact 1-indexed Contract sheet
+// row (as returned by getContractRows), so this never has to guess which
+// row via name/bike matching. Only ever flips a row that is STILL
+// "Pending" at the moment this runs -- if it's already moved on (e.g.
+// someone else already actioned it, or it somehow became "Rented" in the
+// meantime) this refuses and reports why, rather than silently
+// overwriting a status it shouldn't touch. ----
+function cancelContractEntry(data) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Contract');
+    if (!sheet) throw new Error('Sheet named "Contract" not found in this spreadsheet.');
+
+    var rowNum = Math.round(Number(data.rowNumber));
+    if (!rowNum || rowNum < (HEADER_ROWS + 1)) throw new Error('Invalid contract row number.');
+
+    var currentStatus = (sheet.getRange(rowNum, 17).getValue() || '').toString().trim().toLowerCase();
+    if (currentStatus !== 'pending') {
+      throw new Error('This contract is no longer Pending (current status: "' +
+        (currentStatus || '(blank)') + '") -- it may have already been actioned. Refresh the list and try again.');
+    }
+
+    sheet.getRange(rowNum, 17).setValue('Canceled');
+    verifyCell('Contract', rowNum, 17, 'Canceled', 'contract row: status (canceled)');
+
+    var verification = runWriteVerification(ss);
+    var responsePayload = { success: true, row: rowNum };
+    if (verification.problems.length) responsePayload.warning = verification.problems.join(' ');
+
+    return ContentService
+      .createTextOutput(JSON.stringify(responsePayload))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- action:'editContract' -- Contract page, Search tab, click any result
+// to edit it. data: { rowNumber, contact, number, name, nationality,
+// passport, bikeModel, rentingDateFrom (yyyy-MM-dd), returnDate
+// (yyyy-MM-dd), returnTime, deliverToHotel, totalPrice, paidBy, deposit,
+// depositAmount, deliveryFeeApplies, deliveryFee, status }.
+//
+// Deliberately narrow, unlike nearly every other "edit" action in this
+// file: this ONLY overwrites the one Contract row's own cells (columns
+// B-Q -- column A, the created-on date, is left alone). It never touches
+// the customer/income/cash/bikes/deposit sheets and never regenerates the
+// contract Doc/PDF, per explicit instruction that editing a contract here
+// must never ripple out anywhere else in the app. Status is fully
+// editable too, to any of Pending/Rented/Returned/Canceled (or left as
+// whatever free text is sent -- defaults to "Pending" only if blank). ----
+function editContractEntry(data) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Contract');
+    if (!sheet) throw new Error('Sheet named "Contract" not found in this spreadsheet.');
+
+    var rowNum = Math.round(Number(data.rowNumber));
+    if (!rowNum || rowNum < (HEADER_ROWS + 1)) throw new Error('Invalid contract row number.');
+    if (rowNum > sheet.getLastRow()) throw new Error('That contract row no longer exists on the sheet.');
+
+    // Same bracket-stripping a brand-new contract gets, so an edit can't
+    // reintroduce the naming mismatch that used to break the Bikes-sheet
+    // lookup (see stripBikeNameBrackets's comment).
+    var bikeModel = stripBikeNameBrackets(data.bikeModel);
+
+    var depositMethod = (data.deposit || '').toString().trim();
+    var depositNeedsAmount = depositMethod !== '' && depositMethod.toLowerCase() !== 'passport';
+    var depositAmount = depositNeedsAmount ? (data.depositAmount || '') : '';
+    var deliveryFee = data.deliveryFeeApplies ? (data.deliveryFee || '') : '';
+    var status = (data.status || '').toString().trim() || 'Pending';
+
+    var rowValues = [
+      data.contact || '',
+      data.number || '',
+      data.name || '',
+      data.nationality || '',
+      data.passport || '',
+      bikeModel || '',
+      formatIsoDateToDMY(data.rentingDateFrom),
+      formatIsoDateToDMY(data.returnDate),
+      data.returnTime || '',
+      data.deliverToHotel || '',
+      data.totalPrice || '',
+      data.paidBy || '',
+      depositMethod,
+      depositAmount,
+      deliveryFee,
+      status
+    ];
+    sheet.getRange(rowNum, 2, 1, rowValues.length).setValues([rowValues]); // columns B..Q
+
+    verifyCell('Contract', rowNum, 2, data.contact || '', 'edited contract row: how to contact us');
+    verifyCell('Contract', rowNum, 3, data.number || '', 'edited contract row: number');
+    verifyCell('Contract', rowNum, 4, data.name || '', 'edited contract row: name');
+    verifyCell('Contract', rowNum, 5, data.nationality || '', 'edited contract row: nationality');
+    verifyCell('Contract', rowNum, 6, data.passport || '', 'edited contract row: passport number');
+    verifyCell('Contract', rowNum, 7, bikeModel || '', 'edited contract row: bike model');
+    verifyCell('Contract', rowNum, 8, formatIsoDateToDMY(data.rentingDateFrom), 'edited contract row: renting-from date');
+    verifyCell('Contract', rowNum, 9, formatIsoDateToDMY(data.returnDate), 'edited contract row: return date');
+    verifyCell('Contract', rowNum, 12, data.totalPrice || '', 'edited contract row: total price');
+    verifyCell('Contract', rowNum, 13, data.paidBy || '', 'edited contract row: paid by');
+    verifyCell('Contract', rowNum, 14, depositMethod, 'edited contract row: deposit');
+    verifyCell('Contract', rowNum, 15, depositAmount, 'edited contract row: deposit amount');
+    verifyCell('Contract', rowNum, 16, deliveryFee, 'edited contract row: delivery fee');
+    verifyCell('Contract', rowNum, 17, status, 'edited contract row: status');
+
+    var verification = runWriteVerification(ss);
+    var responsePayload = { success: true, row: rowNum };
+    if (verification.problems.length) responsePayload.warning = verification.problems.join(' ');
+
+    return ContentService
+      .createTextOutput(JSON.stringify(responsePayload))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- Normalizes a bike name for matching one sheet's naming style against
+// another's -- e.g. the Contract sheet's "Yamaha GT (Black 2)" against the
+// Bike Tax tab's "Yamaha GT black 2" (no parentheses). Unwraps parens
+// rather than deleting their contents (unlike normalizeBikeNameForRentalLog
+// above), since the color/number inside is usually exactly what
+// distinguishes one specific bike from another and must NOT be dropped
+// when the whole point is picking the right individual bike's plate
+// number. ----
+function normalizeBikeNameForTaxLookup(s) {
+  return (s || '').toString()
+    .toLowerCase()
+    .replace(/[()]/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+// ---- A second, more aggressive normalization on top of
+// normalizeBikeNameForTaxLookup -- also drops engine-size tags like
+// "(125)", "(155cc)", or a bare "125cc", and drops common make words
+// (Yamaha/Honda/GPX). Needed because the Parts and Oil change tab names
+// bikes like "gt black 2 (125)" -- no make, plus a CC tag the other
+// sheets and the Contract form don't include at all. Kept as a fallback
+// (tried only after the plain normalization above finds no match) rather
+// than the primary comparison, since being this aggressive about what
+// counts as "noise" is more likely to over-match on a small fleet. ----
+function normalizeBikeNameCore(s) {
+  var t = (s || '').toString().toLowerCase();
+  t = t.replace(/\(\s*\d{2,4}\s*cc?\s*\)/gi, ' ');   // "(125)" / "(155cc)"
+  t = t.replace(/\b\d{2,4}\s?cc\b/gi, ' ');           // bare "125cc"
+  t = t.replace(/[()]/g, ' ');
+  t = t.replace(/\b(yamaha|honda|gpx)\b/gi, ' ');
+  t = t.replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+  return t;
+}
+
+// ---- True if two bike names refer to the same bike. Tries the plain
+// normalization first (exact match, or one is a whole-word-bounded
+// substring of the other -- so "Yamaha GT black 2" matches "GT black 2",
+// but "GT 2" does NOT falsely match "GT 20"), and only if that finds
+// nothing, falls back to the more aggressive core normalization above
+// (which also strips CC tags and make words) using the same
+// exact-or-whole-word-substring rule. ----
+function bikeNamesMatchForTaxLookup(a, b) {
+  var na = normalizeBikeNameForTaxLookup(a);
+  var nb = normalizeBikeNameForTaxLookup(b);
+  if (na && nb) {
+    if (na === nb) return true;
+    var paddedA = ' ' + na + ' ';
+    var paddedB = ' ' + nb + ' ';
+    if (paddedA.indexOf(paddedB) !== -1 || paddedB.indexOf(paddedA) !== -1) return true;
+  }
+
+  var ca = normalizeBikeNameCore(a);
+  var cb = normalizeBikeNameCore(b);
+  if (!ca || !cb) return false;
+  if (ca === cb) return true;
+  var paddedCa = ' ' + ca + ' ';
+  var paddedCb = ' ' + cb + ' ';
+  return paddedCa.indexOf(paddedCb) !== -1 || paddedCb.indexOf(paddedCa) !== -1;
+}
+
+// ---- Contract status lifecycle step 2 of 2: called from customer intake
+// (the default doPost branch) once a customer's rental has actually been
+// checked in and all the other sheets (customer/income/cash/bikes/deposit)
+// have been updated. Finds the most recent "Pending" row on the Contract
+// sheet for this same renter name + bike (fuzzy bike-name match, same
+// helper used for the tax/oil lookups) and flips its status to "Rented".
+// Matches from the bottom of the sheet up so the newest matching Pending
+// row wins if there happen to be several. Silently returns { found: false }
+// if nothing matches -- callers wrap this in try/catch so a miss here never
+// breaks customer intake, which has already succeeded by this point.
+//
+// Contract sheet columns referenced (0-based data-array index / 1-based
+// column number): D name (3 / 4), G bikeModel (6 / 7), Q status (16 / 17).
+function markMatchingContractAsRented(ss, name, bikeModel) {
+  var sheet = ss.getSheetByName('Contract');
+  if (!sheet) return { found: false };
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) return { found: false };
+  var nameTarget = (name || '').toString().trim().toLowerCase();
+  var bikeTarget = (bikeModel || '').toString().trim();
+  if (!nameTarget) return { found: false };
+
+  for (var i = values.length - 1; i >= 1; i--) {
+    var rowName = (values[i][3] || '').toString().trim().toLowerCase();   // D name
+    var rowBike = (values[i][6] || '').toString().trim();                  // G bikeModel
+    var rowStatus = (values[i][16] || '').toString().trim().toLowerCase(); // Q status
+    if (rowStatus !== 'pending') continue;
+    if (rowName !== nameTarget) continue;
+    if (bikeTarget && rowBike && !bikeNamesMatchForTaxLookup(rowBike, bikeTarget)) continue;
+    var rowNum = i + 1;
+    sheet.getRange(rowNum, 17).setValue('Rented'); // column Q = 17 (1-based)
+    return { found: true, row: rowNum };
+  }
+  return { found: false };
+}
+
+// ---- Contract status lifecycle step 3 of 3: called from markBikeReturned
+// (Bikes Status page, "mark as returned") once a bike's return has
+// actually been recorded on the customer sheet. Finds the most recent
+// "Rented" row on the Contract sheet for this same renter name + bike
+// (same fuzzy bike-name match as the Rented step) and flips its status to
+// "Returned" -- completing the Pending -> Rented -> Returned lifecycle.
+// Matches from the bottom of the sheet up, same reasoning as
+// markMatchingContractAsRented. Silently returns { found: false } if
+// nothing matches -- callers wrap this in try/catch so a miss here never
+// breaks the actual return-marking action, which has already succeeded by
+// this point. ----
+function markMatchingContractAsReturned(ss, name, bikeModel) {
+  var sheet = ss.getSheetByName('Contract');
+  if (!sheet) return { found: false };
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) return { found: false };
+  var nameTarget = (name || '').toString().trim().toLowerCase();
+  var bikeTarget = (bikeModel || '').toString().trim();
+  if (!nameTarget) return { found: false };
+
+  for (var i = values.length - 1; i >= 1; i--) {
+    var rowName = (values[i][3] || '').toString().trim().toLowerCase();   // D name
+    var rowBike = (values[i][6] || '').toString().trim();                  // G bikeModel
+    var rowStatus = (values[i][16] || '').toString().trim().toLowerCase(); // Q status
+    if (rowStatus !== 'rented') continue;
+    if (rowName !== nameTarget) continue;
+    if (bikeTarget && rowBike && !bikeNamesMatchForTaxLookup(rowBike, bikeTarget)) continue;
+    var rowNum = i + 1;
+    sheet.getRange(rowNum, 17).setValue('Returned'); // column Q = 17 (1-based)
+    return { found: true, row: rowNum };
+  }
+  return { found: false };
+}
+
+// ---- Looks up a bike's "Key type" from the Bike Tax tab's "key" column,
+// matched by bike name (fuzzy -- see bikeNamesMatchForTaxLookup). Per how
+// that column is actually filled in: only bikes that ARE keyless have
+// "keyless" written in it -- every other bike (blank cell, or anything
+// else) is a standard key by default. So this returns 'Keyless' only when
+// the cell says so, and 'Standard Key' for every other bike that's found
+// in the sheet at all. Returns '' only when the bike itself can't be
+// found in the Bike Tax tab -- never throws, since this only feeds the
+// auto-generated contract document, not the contract row write itself. ----
+function getKeyTypeForBike(bikeName) {
+  try {
+    var name = (bikeName || '').toString().trim();
+    if (!name) return '';
+    var rows = getBikeTaxCategories();
+    var match = rows.filter(function(r) {
+      return bikeNamesMatchForTaxLookup(r.bike, name);
+    })[0];
+    if (!match) return '';
+    var raw = (match.key || '').toString().trim().toLowerCase();
+    return raw === 'keyless' ? 'Keyless' : 'Standard Key';
+  } catch (err) {
+    return '';
+  }
+}
+
+// ---- Looks up a bike's "Next oil change" figure (km) from the Parts and
+// Oil change tab, matched by bike name in the sheet's first column (fuzzy
+// -- see bikeNamesMatchForTaxLookup). Same never-throws contract as
+// getKeyTypeForBike above. ----
+function getNextOilChangeForBike(bikeName) {
+  try {
+    var name = (bikeName || '').toString().trim();
+    if (!name) return '';
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(PARTS_SHEET_NAME);
+    if (!sheet) return '';
+    var values = sheet.getDataRange().getValues();
+    if (!values.length) return '';
+    var headers = values[0].map(function(h) { return (h || '').toString().trim().toLowerCase(); });
+    var nextOilCol = headers.indexOf('next oil change');
+    if (nextOilCol === -1) return '';
+    for (var i = 1; i < values.length; i++) {
+      var bike = (values[i][0] || '').toString().trim();
+      if (bikeNamesMatchForTaxLookup(bike, name)) {
+        return (values[i][nextOilCol] || '').toString().trim();
+      }
+    }
+    return '';
+  } catch (err) {
+    return '';
+  }
+}
+
+// ---- Escapes a value that's about to be used as the replacement side of
+// DocumentApp's replaceText(pattern, replacement) -- which treats "$" and
+// "\" specially (regex backreferences) even in the replacement string --
+// so a customer name/nationality/etc. that happens to contain either
+// character gets inserted literally instead of breaking the substitution.
+function escapeDocReplacement(value) {
+  return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/\$/g, '\\$');
+}
+
+// ---- Returns the "AA Scooters Contracts" Drive folder, creating it (once)
+// if it doesn't exist yet. Deliberately does NOT use a hardcoded folder
+// ID -- a hardcoded ID would always point at whichever Google account
+// created it, which may not be the account this script actually runs as.
+// Creating it lazily like this means the folder always lands in the same
+// Drive as everything else this script touches (the Contract sheet
+// itself), whichever account that is. The resulting ID is cached in
+// Script Properties so this only searches/creates once. ----
+function getOrCreateContractsFolder() {
+  var props = PropertiesService.getScriptProperties();
+  var cachedId = props.getProperty('CONTRACTS_FOLDER_ID');
+  if (cachedId) {
+    try {
+      return DriveApp.getFolderById(cachedId);
+    } catch (e) {
+      // Cached ID no longer resolves (folder deleted/moved) -- fall
+      // through and look it up / recreate it below.
+    }
+  }
+  var existing = DriveApp.getFoldersByName('AA Scooters Contracts');
+  var folder = existing.hasNext() ? existing.next() : DriveApp.createFolder('AA Scooters Contracts');
+  props.setProperty('CONTRACTS_FOLDER_ID', folder.getId());
+  return folder;
+}
+
+// ---- Returns (creating if necessary) the customer-specific subfolder,
+// inside the main "AA Scooters Contracts" folder, that a generated
+// contract Doc/PDF should be saved into. Every contract a given customer
+// ever has generated lands in the SAME subfolder -- a returning
+// customer's second, third, etc. contract goes into their existing
+// subfolder rather than getting a brand-new one every visit.
+//
+// Matching "is this a returning customer" can't rely on the subfolder's
+// own name including today's date -- that would only ever match a folder
+// created on the exact same day. Instead the match key is name + phone
+// number only; the date embedded in a subfolder's name is frozen at
+// whatever that customer's FIRST contract's rental start date was, and is
+// never changed by later visits. The phone number is the tiebreaker for
+// two different customers who happen to share the same name -- e.g. two
+// "Bank"s with two different numbers get two separate subfolders even
+// though the printed name is identical.
+//
+// Subfolder name format: "<rental start date, dd-MM-yyyy> - <name> -
+// <phone>", e.g. "11-07-2026 - Christian Jay Verona - 081 234 5678". ----
+// ---- Read-only half of the customer-folder lookup -- searches
+// parentFolder's immediate subfolders for one matching this exact
+// name + phone number (see getOrCreateCustomerContractFolder's comment
+// for the full matching rationale), WITHOUT creating anything if none is
+// found. Used both by getOrCreateCustomerContractFolder itself and by
+// findContractDocumentForRow (the "View Contract" buttons' dynamic
+// fallback search), which must never accidentally create a folder just
+// because someone clicked a view button. Returns null if nothing matches. ----
+function findCustomerContractFolder(parentFolder, name, phone) {
+  var nameKey = (name || '').toString().trim().toLowerCase();
+  var phoneKey = (phone || '').toString().trim().toLowerCase();
+  if (!nameKey) return null;
+
+  var subfolders = parentFolder.getFolders();
+  while (subfolders.hasNext()) {
+    var candidate = subfolders.next();
+    // The name and date never contain " - " themselves in normal use, so
+    // splitting on it and taking the FIRST part as the date and the LAST
+    // part as the phone number (with everything in between rejoined as
+    // the name) safely handles a customer name that happens to include a
+    // hyphen of its own.
+    var parts = candidate.getName().split(' - ');
+    if (parts.length < 3) continue;
+    var candidatePhone = parts[parts.length - 1].trim().toLowerCase();
+    var candidateName = parts.slice(1, parts.length - 1).join(' - ').trim().toLowerCase();
+    if (candidateName === nameKey && candidatePhone === phoneKey) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function getOrCreateCustomerContractFolder(parentFolder, data) {
+  var name = (data.name || '').toString().trim();
+  var phone = (data.number || '').toString().trim();
+
+  var existing = findCustomerContractFolder(parentFolder, name, phone);
+  if (existing) return existing;
+
+  // No existing subfolder for this customer -- create one, dated to THIS
+  // (their first) contract's rental start date.
+  var startDateStr = data.rentingDateFrom
+    ? formatIsoDateToDMY(data.rentingDateFrom).replace(/\//g, '-')
+    : Utilities.formatDate(new Date(), SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'dd-MM-yyyy');
+  var folderName = startDateStr + ' - ' + (name || 'Unnamed') + ' - ' + (phone || 'no phone');
+  return parentFolder.createFolder(folderName);
+}
+
+// ---- Saves a photo of the passport image into the SAME per-customer
+// subfolder a contract's Doc/PDF are saved into
+// (getOrCreateCustomerContractFolder), named the same way as the contract
+// itself but with "Photo of Passport" in place of "Contract" -- e.g.
+// "Photo of Passport - Christian Jay Verona - 11-07-2026.jpg" next to
+// "Contract - Christian Jay Verona - 11-07-2026". If data.rowNumber is
+// given, the resulting link is also backfilled onto that Contract row
+// (column T) for later retrieval.
+//
+// data: { name, number, rentingDateFrom, passportPhotoBase64 (raw
+// base64, no "data:" prefix), passportPhotoMimeType, rowNumber
+// (optional) }. Returns { success, url } or { success: false, error } --
+// never throws, so a caller folding this into a bigger response (like
+// addContractEntry) can just turn a failure into a warning instead of
+// losing the whole save. ----
+function savePassportPhoto(data) {
+  try {
+    var name = (data.name || '').toString().trim();
+    if (!name) throw new Error('No customer name given.');
+    if (!data.passportPhotoBase64) throw new Error('No photo data given.');
+
+    var parentFolder = getOrCreateContractsFolder();
+    var folder = getOrCreateCustomerContractFolder(parentFolder, data);
+
+    var dateStr = data.rentingDateFrom
+      ? formatIsoDateToDMY(data.rentingDateFrom).replace(/\//g, '-')
+      : Utilities.formatDate(new Date(), SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'dd-MM-yyyy');
+
+    var mimeType = (data.passportPhotoMimeType || 'image/jpeg').toLowerCase();
+    var ext = '.jpg';
+    if (mimeType.indexOf('png') !== -1) ext = '.png';
+    else if (mimeType.indexOf('webp') !== -1) ext = '.webp';
+    else if (mimeType.indexOf('heic') !== -1) ext = '.heic';
+    else if (mimeType.indexOf('gif') !== -1) ext = '.gif';
+
+    var baseName = 'Photo of Passport - ' + name + ' - ' + dateStr;
+    var bytes = Utilities.base64Decode(data.passportPhotoBase64);
+    var blob = Utilities.newBlob(bytes, mimeType, baseName + ext);
+    var file = folder.createFile(blob);
+
+    // Same view-only public-link sharing as the generated contract Doc/PDF,
+    // for the same reason -- opening it from a different Google login
+    // shouldn't hit a "you need access" wall.
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    if (data.rowNumber) {
+      try {
+        var ss = SpreadsheetApp.getActiveSpreadsheet();
+        var sheet = ss.getSheetByName('Contract');
+        if (sheet) {
+          var rowNum = Math.round(Number(data.rowNumber));
+          if (rowNum && rowNum >= (HEADER_ROWS + 1) && rowNum <= sheet.getLastRow()) {
+            sheet.getRange(rowNum, 20).setValue(file.getUrl()); // column T
+          }
+        }
+      } catch (backfillErr) {
+        Logger.log('Could not store photo-of-passport link on the row: ' + backfillErr.message);
+      }
+    }
+
+    return { success: true, url: file.getUrl() };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ---- action:'uploadPassportPhoto' -- Contract page, standalone upload
+// (the Search tab's edit modal, for attaching/replacing a photo of the
+// passport on a contract that already exists, separately from
+// editContract's sheet-only field edits). data: same shape
+// savePassportPhoto expects, plus rowNumber so the link gets backfilled
+// onto that exact row. ----
+function uploadPassportPhotoEntry(data) {
+  var result = savePassportPhoto(data);
+  return ContentService
+    .createTextOutput(JSON.stringify(result.success ? { success: true, url: result.url } : { success: false, error: result.error }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ---- action:'findContractDocument' -- the "View Contract PDF" / "View
+// Contract Google Doc" buttons' fallback for a row that has no
+// contractDocUrl/contractPdfUrl stored on it yet (e.g. a contract
+// generated before those columns existed). Reconstructs where the file
+// SHOULD be from the row's own data -- the customer's subfolder (matched
+// by name + phone, same as generateContractDocument uses, but read-only
+// here: never creates a folder just because someone clicked a view
+// button) and the expected file name ("Contract - <name> - <rental start
+// date>"). If found, the link(s) are also backfilled onto the Contract
+// row (columns R/S) so future clicks use the fast stored-link path
+// instead of searching Drive again.
+//
+// This is inherently a best-effort reconstruction, not a guaranteed
+// lookup: if the row's name was changed via the edit feature AFTER the
+// contract document was generated, the rebuilt file name won't match the
+// actual file anymore, and this will report "not found" rather than
+// guessing. New contracts going forward always have their real links
+// stored directly at generation time, so this path is really only for
+// older rows. ----
+function findContractDocumentEntry(data) {
+  try {
+    var name = (data.name || '').toString().trim();
+    var phone = (data.number || '').toString().trim();
+    if (!name) throw new Error('No customer name given to search by.');
+
+    var parentFolder = getOrCreateContractsFolder();
+    var matchedFolder = findCustomerContractFolder(parentFolder, name, phone);
+    if (!matchedFolder) {
+      throw new Error('Could not find a Drive folder for "' + name + '"' +
+        (phone ? ' (' + phone + ')' : '') + ' under "AA Scooters Contracts".');
+    }
+
+    var dateStr = data.rentingDateFrom ? formatIsoDateToDMY(data.rentingDateFrom).replace(/\//g, '-') : '';
+    var expectedBaseName = 'Contract - ' + (name || 'Unnamed') + ' - ' + dateStr;
+
+    var docUrl = '';
+    var pdfUrl = '';
+    var files = matchedFolder.getFiles();
+    while (files.hasNext()) {
+      var f = files.next();
+      var fname = f.getName();
+      if (fname === expectedBaseName) {
+        docUrl = f.getUrl();
+      } else if (fname === expectedBaseName + '.pdf') {
+        pdfUrl = f.getUrl();
+      }
+    }
+
+    if (!docUrl && !pdfUrl) {
+      throw new Error('Found "' + name + '"\'s folder, but no contract file dated ' + dateStr +
+        ' was inside it -- it may have been renamed, moved, or generated under a different name.');
+    }
+
+    // Backfill onto the Contract row so future clicks skip straight to
+    // the stored link instead of searching Drive again. Never allowed to
+    // turn a successful find into a failure.
+    if (data.rowNumber) {
+      try {
+        var ss = SpreadsheetApp.getActiveSpreadsheet();
+        var sheet = ss.getSheetByName('Contract');
+        if (sheet) {
+          var rowNum = Math.round(Number(data.rowNumber));
+          if (rowNum && rowNum >= (HEADER_ROWS + 1) && rowNum <= sheet.getLastRow()) {
+            if (docUrl) sheet.getRange(rowNum, 18).setValue(docUrl);
+            if (pdfUrl) sheet.getRange(rowNum, 19).setValue(pdfUrl);
+          }
+        }
+      } catch (backfillErr) {
+        Logger.log('Could not backfill contract doc/pdf links: ' + backfillErr.message);
+      }
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, docUrl: docUrl, pdfUrl: pdfUrl }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- Converts an arbitrary Drive file (e.g. a raw uploaded .docx) into
+// a real Google Doc via the Drive REST API's files.copy, requesting the
+// native Google Docs mime type -- this is the actual "convert on upload"
+// behavior Drive's UI normally does for you, triggered here manually
+// since a file that's already sitting in Drive can't be re-uploaded.
+// Uses UrlFetchApp + ScriptApp.getOAuthToken() rather than the Advanced
+// Drive Service, so it works with no extra setup in the Apps Script
+// editor (no service to enable) -- the "drive" OAuth scope this needs is
+// already granted, since DriveApp is used extensively elsewhere in this
+// project. Returns the new file's ID; throws if the conversion fails. ----
+function convertToGoogleDoc(fileId, newName, destFolder) {
+  var url = 'https://www.googleapis.com/drive/v3/files/' + fileId + '/copy';
+  var payload = {
+    name: newName,
+    mimeType: 'application/vnd.google-apps.document',
+    parents: [destFolder.getId()]
+  };
+  var resp = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true
+  });
+  var code = resp.getResponseCode();
+  var json;
+  try {
+    json = JSON.parse(resp.getContentText());
+  } catch (e) {
+    json = null;
+  }
+  if (code < 200 || code >= 300 || !json || !json.id) {
+    throw new Error('Could not convert "' + newName + '" to a Google Doc (HTTP ' + code + '): ' + resp.getContentText());
+  }
+  return json.id;
+}
+
+// ---- Returns the ID of the master contract template Doc, building it
+// (once) inside the Contracts folder if it doesn't exist yet -- same
+// "always the right Drive account" reasoning as getOrCreateContractsFolder
+// above. See buildContractTemplateDoc for the actual template layout. ----
+function getOrCreateContractTemplateDoc(folder) {
+  var props = PropertiesService.getScriptProperties();
+  var name = 'AA Scooter Rental Agreement - MASTER TEMPLATE (do not edit fields)';
+
+  // Look up by name FIRST, every time -- not just as a fallback when the
+  // cache is empty. This is deliberate: it means if a real, properly
+  // formatted template (placed in this folder under this exact name) is
+  // ever manually uploaded, it always wins over both a stale cached ID
+  // and over auto-building a new one -- even if a Script Property is
+  // still pointing at an older DocumentApp-built version from before.
+  var existingFiles = folder.getFilesByName(name);
+  if (existingFiles.hasNext()) {
+    var found = existingFiles.next();
+    var foundId = found.getId();
+    // DocumentApp can only open a NATIVE Google Doc -- if what's sitting
+    // here is a raw uploaded .docx (Drive's "convert on upload" setting
+    // off, or opened in Office-compatibility mode instead of actually
+    // converted), DocumentApp.openById() on it fails. Rather than let
+    // that surface as a silent generation failure, auto-convert it to a
+    // real Google Doc here, once, and use the converted copy from then
+    // on -- so it doesn't matter what format actually got uploaded.
+    if (found.getMimeType() !== MimeType.GOOGLE_DOCS) {
+      foundId = convertToGoogleDoc(foundId, name, folder);
+      // Rename the original upload out of the way so it stops matching
+      // this exact-name search -- otherwise, since it's still sitting in
+      // the same folder under the same name, the NEXT contract would
+      // find it again (ahead of, or instead of, the converted copy,
+      // Drive doesn't guarantee which of two same-named files a lookup
+      // returns first) and re-convert it all over again every single
+      // time, leaving a pile of duplicate converted copies behind.
+      found.setName(name + ' (original upload, converted below)');
+    }
+    props.setProperty('CONTRACT_TEMPLATE_DOC_ID', foundId);
+    return foundId;
+  }
+
+  var cachedId = props.getProperty('CONTRACT_TEMPLATE_DOC_ID');
+  if (cachedId) {
+    try {
+      DriveApp.getFileById(cachedId);
+      return cachedId;
+    } catch (e) {
+      // Cached ID no longer resolves -- fall through and build one below.
+    }
+  }
+
+  var builtId = buildContractTemplateDoc(folder, name);
+  props.setProperty('CONTRACT_TEMPLATE_DOC_ID', builtId);
+  return builtId;
+}
+
+// ---- Builds the master contract template from scratch as a new Google
+// Doc, entirely via the DocumentApp API -- no external upload/conversion
+// step, so it's always created under whichever account this script runs
+// as. Mirrors the table-based AA Scooter Rental Agreement layout, with
+// <<TOKEN>> placeholders in place of each field generateContractDocument
+// fills in. Only ever called once per deployment (see
+// getOrCreateContractTemplateDoc), so it's fine that this is a bit slow. ----
+function buildContractTemplateDoc(folder, name) {
+  var doc = DocumentApp.create(name);
+  var id = doc.getId();
+  var file = DriveApp.getFileById(id);
+  folder.addFile(file);
+  DriveApp.getRootFolder().removeFile(file);
+
+  var body = doc.getBody();
+  body.clear();
+
+  var title = body.appendParagraph('AA SCOOTER RENTAL');
+  title.setHeading(DocumentApp.ParagraphHeading.TITLE);
+  title.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+
+  var sub = body.appendParagraph('Scooter Rental Agreement');
+  sub.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  sub.editAsText().setBold(true);
+
+  var addr = body.appendParagraph('150/33 Chanyayon Village, Suthep, Chiang Mai 50200, Thailand  |  +66 86 654 3609');
+  addr.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  addr.editAsText().setFontSize(9);
+
+  body.appendParagraph('');
+
+  var infoTable = body.appendTable([
+    ['RENTER INFORMATION', 'SCOOTER DETAILS'],
+    [
+      'Full Name: <<FULL_NAME>>\nPassport / ID No.: <<PASSPORT_ID>>\nNationality: <<NATIONALITY>>\nPhone / WhatsApp: <<PHONE>>\nDelivery service: <<DELIVERY>>',
+      'Bike: <<BIKE>>\nPlate Number: <<PLATE>>\nEngine Size (CC): <<CC>>\nKey type: <<KEY_TYPE>>\nNext oil change (km): <<NEXT_OIL>>'
+    ]
+  ]);
+  infoTable.getRow(0).getCell(0).editAsText().setBold(true);
+  infoTable.getRow(0).getCell(1).editAsText().setBold(true);
+
+  body.appendParagraph('');
+  body.appendParagraph('ACCESSORIES ISSUED & RENTAL DETAILS').editAsText().setBold(true);
+
+  body.appendTable([
+    [
+      'Half size Helmet (qty): 1☐ / 2☐ / 3☐ / 4☐\nFull Size Helmet (qty): 1☐ / 2☐ / 3☐ / 4☐\nSize S___ M___ L___ XL____\nKid Helmet (qty): 1☐ / 2☐\nFull Face Helmet (qty): 1☐ / 2☐',
+      'Rental Start:  Date <<START_DATE>>  Time: <<START_TIME>>\nReturn         Date <<RETURN_DATE>>  Time: <<RETURN_TIME>>\nDelivery Fee apply: <<DELIVERY_FEE>>\nTotal Rental Fee : <<TOTAL_FEE>>\nDeposit: <<DEPOSIT_METHOD>>\nAmount: <<DEPOSIT_AMOUNT>>'
+    ]
+  ]);
+
+  body.appendParagraph('');
+  body.appendParagraph('TERMS & CONDITIONS').editAsText().setBold(true);
+
+  var terms = [
+    "Driver Eligibility: A valid motorcycle licence (incl. International Driving Permit where required) is mandatory. All fines and legal consequences are the Renter's sole responsibility, including those arising from unlicensed driving.",
+    "Responsibility: Renter is fully responsible for the scooter and all issued accessories, and for any damage, theft, loss, fines, towing, or legal fees arising from negligence, misuse, or violation of Thai law.",
+    "Insurance: Only Thailand's compulsory Por Ror Bor insurance applies (medical expenses only). It does NOT cover scooter damage/theft, third-party property, or personal belongings — any uninsured loss is the Renter's responsibility.",
+    "Prohibited Use: No other operator, no driving under influence of alcohol/drugs, no racing/off-roading/illegal use, no exceeding load capacity.",
+    "Accident & Breakdown: Renter must contact AA Scooter Rental immediately in the event of an accident, theft, loss of the vehicle, or any mechanical issue. The Renter must not attempt to repair the scooter and must not abandon it or authorize repairs without AA Scooter Rental's prior permission.",
+    "Transportation & Recovery: For genuine mechanical failure within Chiang Mai City that is not due to the Renter's negligence, illegal activity, or irresponsible use, AA Scooter Rental is responsible for pickup and repair of the scooter at no charge, with transport/pickup costs covered within the Chiang Mai area. Renter bears all recovery/towing costs if the scooter is >50 km from Chiang Mai City Centre or outside Chiang Mai Province, and bears all repair/recovery costs (any location) if the issue results from accident, negligence, misuse, rider error, fuel/battery/tyre neglect, or breach of this Agreement.",
+    "Return: Scooter must be returned on the agreed date/time in original condition (normal wear excepted); late returns are charged the standard daily rate.",
+    "Early Return: If the Renter decides to return the scooter before the agreed due date/time, they must notify AA Scooter Rental more than 24 hours in advance."
+  ];
+  terms.forEach(function(t) {
+    body.appendListItem(t).setGlyphType(DocumentApp.GlyphType.BULLET).editAsText().setFontSize(9);
+  });
+
+  body.appendParagraph('');
+  body.appendParagraph('ACCESSORY REPLACEMENT CHARGES (THB)').editAsText().setBold(true);
+
+  body.appendTable([
+    ['Electronic Key', 'Standard Key', 'Top Box', 'Half Helmet', 'Kid Helmet', 'Full Face'],
+    ['1,500', '300', '800', '250', '350', '400']
+  ]);
+
+  body.appendParagraph('');
+  body.appendParagraph('Declaration: I have inspected the scooter and accessories listed above, received them in good condition, understand and accept these Terms & Conditions, and agree to return them in the same condition, normal wear and tear excepted.')
+    .editAsText().setItalic(true).setFontSize(9);
+
+  body.appendParagraph('');
+  body.appendTable([
+    ['RENTER', 'AA SCOOTER RENTAL'],
+    ['Name:\n\nSignature:\n\nDate:', 'Representative:\n\nSignature:\n\nDate:']
+  ]);
+
+  doc.saveAndClose();
+  return id;
+}
+
+// ---- Fills the master contract template (a Google Doc with <<TOKEN>>
+// placeholders, built by buildContractTemplateDoc) with one contract's
+// details, saves the filled Doc plus a PDF export into the "AA Scooters
+// Contracts" Drive folder, and returns their URLs. Both the folder and
+// the template are created lazily on first use -- see
+// getOrCreateContractsFolder / getOrCreateContractTemplateDoc -- so
+// everything this generates always lands in whichever Google account
+// this script is actually deployed/running as, never a hardcoded one.
+// Called automatically right after a new row is written to the Contract
+// sheet, by addContractEntry above. Deliberately never throws -- on any
+// failure (Drive quota, etc.) it returns { success: false, error }
+// instead, so a problem here can never stop the contract row itself from
+// being saved. ----
+function generateContractDocument(data, depositMethod, depositAmount, deliveryFee) {
+  try {
+    var bikeModel = (data.bikeModel || '').toString().trim();
+
+    var keyType = getKeyTypeForBike(bikeModel);
+    var nextOil = getNextOilChangeForBike(bikeModel);
+
+    var cc = '';
+    var plate = '';
+    var categoryRows = getBikeTaxCategories();
+    var bikeRow = categoryRows.filter(function(r) {
+      return bikeNamesMatchForTaxLookup(r.bike, bikeModel);
+    })[0];
+    if (bikeRow) {
+      cc = bikeRow.cc || '';
+      plate = bikeRow.plate || '';
+    }
+
+    // Only one time field exists on the contract intake form (Return
+    // time) -- Rental Start and Return must show the same time on the
+    // document, per how this contract is actually run, so both tokens use
+    // it.
+    var time = data.returnTime || '';
+
+    var isPassportDeposit = (depositMethod || '').toString().trim().toLowerCase() === 'passport';
+    var depositAmountDisplay = isPassportDeposit
+      ? 'Passport'
+      : (depositAmount !== '' && depositAmount !== undefined && depositAmount !== null
+          ? (Number(depositAmount).toLocaleString('en-US') + ' THB')
+          : '');
+    var totalFeeDisplay = (data.totalPrice !== undefined && data.totalPrice !== null && data.totalPrice !== '')
+      ? (Number(data.totalPrice).toLocaleString('en-US') + ' THB')
+      : '';
+    var deliveryFeeDisplay = (deliveryFee !== undefined && deliveryFee !== null && deliveryFee !== '')
+      ? (Number(deliveryFee).toLocaleString('en-US') + ' THB')
+      : 'No';
+
+    var tokens = {
+      '<<FULL_NAME>>': data.name || '',
+      '<<PASSPORT_ID>>': data.passport || '',
+      '<<NATIONALITY>>': data.nationality || '',
+      '<<PHONE>>': data.number || '',
+      '<<DELIVERY>>': data.deliverToHotel || '',
+      '<<BIKE>>': bikeModel,
+      '<<PLATE>>': plate,
+      '<<CC>>': cc,
+      '<<KEY_TYPE>>': keyType,
+      '<<NEXT_OIL>>': nextOil,
+      '<<START_DATE>>': formatIsoDateToDMY(data.rentingDateFrom),
+      '<<START_TIME>>': time,
+      '<<RETURN_DATE>>': formatIsoDateToDMY(data.returnDate),
+      '<<RETURN_TIME>>': time,
+      '<<DELIVERY_FEE>>': deliveryFeeDisplay,
+      '<<TOTAL_FEE>>': totalFeeDisplay,
+      '<<DEPOSIT_METHOD>>': isPassportDeposit ? 'Passport' : (depositMethod || ''),
+      '<<DEPOSIT_AMOUNT>>': depositAmountDisplay
+    };
+
+    var parentFolder = getOrCreateContractsFolder();
+    var templateId = getOrCreateContractTemplateDoc(parentFolder);
+    var folder = getOrCreateCustomerContractFolder(parentFolder, data);
+
+    // The file name uses THIS contract's own rental start date (not
+    // "today", the date it happens to be generated) -- every contract for
+    // a given customer has its own rental period, so this is what
+    // actually keeps repeat customers' contracts inside their shared
+    // subfolder from colliding/looking identical.
+    var contractDateStr = data.rentingDateFrom
+      ? formatIsoDateToDMY(data.rentingDateFrom).replace(/\//g, '-')
+      : Utilities.formatDate(new Date(), SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'dd-MM-yyyy');
+    var fileName = 'Contract - ' + (data.name || 'Unnamed') + ' - ' + contractDateStr;
+
+    var templateFile = DriveApp.getFileById(templateId);
+    var copyFile = templateFile.makeCopy(fileName, folder);
+
+    var doc = DocumentApp.openById(copyFile.getId());
+    var body = doc.getBody();
+    Object.keys(tokens).forEach(function(token) {
+      body.replaceText(token, escapeDocReplacement(tokens[token]));
+    });
+    doc.saveAndClose();
+
+    var pdfBlob = DriveApp.getFileById(copyFile.getId()).getAs(MimeType.PDF);
+    pdfBlob.setName(fileName + '.pdf');
+    var pdfFile = folder.createFile(pdfBlob);
+
+    // Anyone with the link can view -- so opening the link from a
+    // different Google account (e.g. checking it from a personal login
+    // instead of the account this script runs as) doesn't hit a "You
+    // need access" wall. View-only, not edit -- doesn't let anyone
+    // change the contract.
+    copyFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    return {
+      success: true,
+      docUrl: copyFile.getUrl(),
+      pdfUrl: pdfFile.getUrl()
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
   }
 }
 
@@ -667,15 +1728,42 @@ function addAmountToDepositCell(sheet, row, col, rawAmount) {
     'running deposit total at "' + sheet.getName() + '" ' + columnToLetter(col) + row);
 }
 
+// ---- Removes bracket CHARACTERS from a bike name while keeping whatever
+// was inside them -- "Yamaha GT (Black 2)" becomes "Yamaha GT Black 2".
+// Applied to data.bikeModel as soon as it comes in from the Contract page
+// and the Customer Record page (see addContractEntry and the customer-
+// intake branch of doPost), so brackets never actually reach the Contract,
+// customer, bikes, income, or cash sheets -- they were never needed there,
+// and letting them through was exactly what broke the "bikes" sheet
+// monthly-total lookup below (see normalizeBikeNameForRentalLog's comment
+// for the full story). ----
+function stripBikeNameBrackets(s) {
+  return (s || '').toString()
+    .replace(/[()]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // ---- Same fuzzy bike-name matching used client-side in bikes.html and
 // bike-name-audit.html, ported here so server-side income logging matches
 // the same bike a customer row displays under (e.g. "Aerox Cool 1 (black)"
 // on the customer sheet should still land on the "aerox cool 1" row of the
-// "bikes" sheet, and "GT Black" should NOT be confused with "GT Black 2"). ----
+// "bikes" sheet, and "GT Black" should NOT be confused with "GT Black 2").
+//
+// Unwraps parens rather than deleting their contents (this used to delete
+// everything inside the brackets, e.g. "Yamaha GT (Black 2)" collapsed all
+// the way down to just "yamaha gt" -- which then not only lost the "Black
+// 2" distinguishing text but could even wrongly prefix-match a DIFFERENT
+// bike like "Yamaha GT (Red)". Keeping the contents, same approach as
+// normalizeBikeNameForTaxLookup, fixes both problems: "Yamaha GT (Black
+// 2)" now correctly matches the "bikes" sheet's plain "Yamaha GT Black 2"
+// row). stripBikeNameBrackets above now also keeps brackets from ever
+// reaching the sheets in the first place, so this unwrapping is really a
+// second, belt-and-braces layer for any older rows that still have them. ----
 function normalizeBikeNameForRentalLog(s) {
   return (s || '').toString()
     .toLowerCase()
-    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[()]/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     .replace(/\s+/g, ' ');
@@ -745,6 +1833,28 @@ function findBikesSheetRow(sheet, bikeName, startRow) {
   return -1;
 }
 
+// ---- Used only to build a helpful error message when findBikesSheetRow
+// comes up empty -- lists the actual bike names present in that section of
+// the "bikes" sheet (skipping label rows like "total"/"Expenses" via
+// looksLikeBikesSheetLabel, defined further down), so a naming mismatch
+// (brackets, extra words, a typo) is something staff can spot immediately
+// instead of just being told "not found". Capped at 40 names so a huge
+// fleet doesn't turn the error into an unreadable wall of text. ----
+function listBikesSheetNamesForDiagnostics(sheet, sectionStartRowOverride) {
+  var start = sectionStartRowOverride || 2;
+  var lastRow = sheet.getLastRow();
+  if (lastRow < start) return [];
+  var names = sheet.getRange(start, 1, lastRow - start + 1, 1).getValues();
+  var out = [];
+  for (var i = 0; i < names.length; i++) {
+    var raw = (names[i][0] || '').toString().trim();
+    if (!raw || looksLikeBikesSheetLabel(raw)) continue;
+    out.push(raw);
+    if (out.length >= 40) break;
+  }
+  return out;
+}
+
 // ---- Adds a rental/extension amount into the bike's cell for the current
 // month on the "bikes" sheet, so each bike's monthly income total keeps
 // growing as a visible running formula (e.g. "=2000+2500+2800") every time
@@ -786,8 +1896,14 @@ function addRentalAmountToBikesSheet(ss, bikeModel, rawAmount, monthNameOverride
 
   var row = findBikesSheetRow(sheet, bikeNameTrimmed, sectionStartRowOverride);
   if (row === -1) {
+    var knownNames = listBikesSheetNamesForDiagnostics(sheet, sectionStartRowOverride);
+    var hint = knownNames.length
+      ? ' This usually means the bike name typed on the intake form doesn\'t match the wording on the "' +
+        BIKES_SHEET_NAME + '" sheet (extra words, different spelling, stray brackets, etc). Names currently on that sheet: ' +
+        knownNames.join(', ') + '.'
+      : '';
     throw new Error('Could not find a row for "' + bikeNameTrimmed + '" on the "' + BIKES_SHEET_NAME +
-      '" sheet -- its monthly total was NOT updated.');
+      '" sheet -- its monthly total was NOT updated.' + hint);
   }
 
   var monthName = monthNameOverride || Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'MMMM'); // e.g. "July"
@@ -798,6 +1914,22 @@ function addRentalAmountToBikesSheet(ss, bikeModel, rawAmount, monthNameOverride
   }
 
   var cell = sheet.getRange(row, col);
+
+  // Force any earlier write in THIS request to recalculate before reading
+  // the cell's current value below. Without this, a second call that
+  // targets the SAME cell in the same request (e.g. editExpenseRow's
+  // subtract-old-split immediately followed by add-new-split, when the
+  // split's bike didn't actually change) can read a stale, not-yet-
+  // recalculated value here -- Apps Script doesn't recalculate formulas
+  // until SpreadsheetApp.flush() runs, which otherwise only happens once,
+  // at the very end, in runWriteVerification(). A stale beforeVal doesn't
+  // corrupt the actual write (the formula is built from getFormula(),
+  // which is always current), but it DOES produce a wrong expectation for
+  // the post-write check, which then fails against the real final value
+  // even though the sheet is correct -- exactly the false-positive "CHECK
+  // FAILED" seen when editing an expense without changing its bike split.
+  try { SpreadsheetApp.flush(); } catch (flushErr) {}
+
   var formula = cell.getFormula();
 
   // The evaluated value before this write -- the post-write check below
@@ -1132,9 +2264,27 @@ function markBikeReturned(data) {
     verifyCell('customer', rowNumber, CUSTOMER_RETURN_DATE_COL, dateValue, 'return date');
     verifyCell('customer', rowNumber, CUSTOMER_SITUATION_COL, 'Returned', 'situation');
 
+    // Once this bike is marked Returned here, the matching Contract row
+    // (found by name + bike, currently "Rented") should flip to "Returned"
+    // too -- completing the Pending -> Rented -> Returned lifecycle.
+    // Wrapped so a problem here never breaks the actual return-marking
+    // action, which has already succeeded by this point.
+    var contractStatusWarning = null;
+    try {
+      var customerName = sheet.getRange(rowNumber, 3).getValue();  // C: name
+      var customerBike = sheet.getRange(rowNumber, 6).getValue();  // F: bikeModel
+      markMatchingContractAsReturned(ss, customerName, customerBike);
+    } catch (contractStatusErr) {
+      contractStatusWarning = 'Contract status update: ' + contractStatusErr.message;
+      Logger.log('Contract status update (returned) warning: ' + contractStatusErr.message);
+    }
+
     var responsePayload = { success: true };
     var verification = runWriteVerification(ss);
-    if (verification.problems.length) responsePayload.warning = verification.problems.join(' ');
+    var warnings = [];
+    if (verification.problems.length) warnings.push(verification.problems.join(' '));
+    if (contractStatusWarning) warnings.push(contractStatusWarning);
+    if (warnings.length) responsePayload.warning = warnings.join(' ');
 
     return ContentService
       .createTextOutput(JSON.stringify(responsePayload))
@@ -1344,6 +2494,296 @@ function closeBikeForExtend(data) {
   }
 }
 
+// ---- action:'swapBike' -- called from the "Swap Bike" button on the Bikes
+// Status page. A customer swaps their current bike for a different one
+// partway through their rental: the days already used on the old bike are
+// "cashed out" at that bike's daily rate, the old booking is closed out
+// exactly like a normal Return (return date = today, situation =
+// "Returned"), and a brand-new customer row is appended for the new bike,
+// covering the REMAINDER of the original rental window -- from today
+// through the ORIGINAL booking's return date (captured here before it's
+// overwritten on the old row), not a fresh full-length booking. The two
+// amounts (data.returnAmount, data.newBikeAmount) are re-checked here even
+// though the client already validated them, since they must add up to
+// exactly what's currently on the old row's total price -- belt and
+// suspenders, same spirit as isExtendSource's server-side checks elsewhere
+// in this file.
+//
+// Unlike a brand-new customer intake (the default doPost branch below) or a
+// long extension (extendBikeRow/closeBikeForExtend + a fresh customers.html
+// row), a swap deliberately does NOT touch the monthly income sheet, the
+// cash sheet, or any deposit tracking -- that money was already logged once,
+// when the original booking was made, so logging it again here would
+// double-count it. The only two things a swap adjusts are the "customer"
+// sheet (this function) and the "bikes" sheet's per-bike monthly totals
+// (below) -- and even there, it only shifts the SAME total between the old
+// and new bike's columns for the month the ORIGINAL rental started in (not
+// necessarily the current month), since that's the month the money was
+// actually recorded against. The new row's "source" column (P) is left
+// blank -- no "Swap" label for now, per how this was scoped. ----
+function swapBike(data) {
+  try {
+    var rowNumber = parseInt(data.rowNumber, 10);
+    if (!rowNumber || rowNumber < 2) {
+      throw new Error('Invalid row number.');
+    }
+    var newBikeModel = (data.newBikeModel || '').toString().trim();
+    if (!newBikeModel) {
+      throw new Error('No new bike given.');
+    }
+    var returnAmount = Number(data.returnAmount);
+    var newBikeAmount = Number(data.newBikeAmount);
+    if (isNaN(returnAmount) || returnAmount < 0 || isNaN(newBikeAmount) || newBikeAmount < 0) {
+      throw new Error('Both amounts must be numbers of 0 or more.');
+    }
+    // Optional "upgrade" charge -- e.g. a customer moving from a smaller
+    // bike to a bigger/better one pays something extra on top. This is
+    // brand-new money, not part of redistributing what was already paid,
+    // so it's validated separately from returnAmount/newBikeAmount above.
+    var additionalAmount = Number(data.additionalAmount) || 0;
+    if (additionalAmount < 0) {
+      throw new Error('Additional amount must be 0 or more.');
+    }
+    var additionalPaidBy = (data.additionalPaidBy || '').toString().trim();
+    if (additionalAmount > 0 && !additionalPaidBy) {
+      throw new Error('An additional amount was given but no payment type was selected for it.');
+    }
+    if (!data.returnDate) {
+      throw new Error('No return date given.');
+    }
+    var m = String(data.returnDate).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!m) {
+      throw new Error('Return date must be in yyyy-MM-dd format.');
+    }
+    var y = parseInt(m[1], 10), mo = parseInt(m[2], 10) - 1, d = parseInt(m[3], 10);
+    var todayValue = new Date(y, mo, d);
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('customer');
+    if (!sheet) {
+      throw new Error('Sheet named "customer" not found in this spreadsheet.');
+    }
+
+    var CUSTOMER_CONTACT_COL = 2;       // B: contact
+    var CUSTOMER_NAME_COL = 3;          // C: name
+    var CUSTOMER_NATIONALITY_COL = 4;   // D: nationality
+    var CUSTOMER_PASSPORT_COL = 5;      // E: passport
+    var CUSTOMER_BIKE_COL = 6;          // F: bikeModel
+    var CUSTOMER_RENTFROM_COL = 8;      // H: rentingDateFrom
+    var CUSTOMER_RETURN_DATE_COL = 9;   // I: Return date
+    var CUSTOMER_RETURN_TIME_COL = 10;  // J: Return time
+    var CUSTOMER_DELIVER_COL = 11;      // K: deliver to hotel
+    var CUSTOMER_TOTAL_PRICE_COL = 12;  // L: total price
+    var CUSTOMER_PAIDBY_COL = 13;       // M: paid by
+    var CUSTOMER_SITUATION_COL = 14;    // N: situation
+
+    var rowValues = sheet.getRange(rowNumber, 1, 1, 14).getValues()[0];
+    var oldBikeModel = (rowValues[CUSTOMER_BIKE_COL - 1] || '').toString().trim();
+    var oldTotalPrice = Number(rowValues[CUSTOMER_TOTAL_PRICE_COL - 1]);
+    if (isNaN(oldTotalPrice)) oldTotalPrice = 0;
+
+    // Belt-and-suspenders re-check: the two amounts must add up to exactly
+    // what's currently on this row, regardless of what the client thought
+    // the total was -- protects against a stale page or a race with some
+    // other edit to this row landing between load and save.
+    if (Math.abs((returnAmount + newBikeAmount) - oldTotalPrice) > 0.01) {
+      throw new Error('Return amount (' + returnAmount + ') + new bike amount (' + newBikeAmount +
+        ') must add up to this booking\'s current total price (' + oldTotalPrice + ').');
+    }
+
+    var origRentFromRaw = rowValues[CUSTOMER_RENTFROM_COL - 1];
+    var origReturnDateRaw = rowValues[CUSTOMER_RETURN_DATE_COL - 1];
+    var origReturnTime = rowValues[CUSTOMER_RETURN_TIME_COL - 1] || '';
+    var contact = rowValues[CUSTOMER_CONTACT_COL - 1] || '';
+    var name = rowValues[CUSTOMER_NAME_COL - 1] || '';
+    var nationality = rowValues[CUSTOMER_NATIONALITY_COL - 1] || '';
+    var passport = rowValues[CUSTOMER_PASSPORT_COL - 1] || '';
+    var deliverToHotel = rowValues[CUSTOMER_DELIVER_COL - 1] || '';
+    var paidBy = rowValues[CUSTOMER_PAIDBY_COL - 1] || '';
+
+    // ---- 1) Close out the old row: same as a normal Return, except the
+    // total price is overwritten with just the "used" portion (returnAmount)
+    // instead of being left as the full original amount. ----
+    sheet.getRange(rowNumber, CUSTOMER_TOTAL_PRICE_COL).setValue(returnAmount);
+
+    var dateCell = sheet.getRange(rowNumber, CUSTOMER_RETURN_DATE_COL);
+    dateCell.setValue(todayValue);
+    dateCell.setFontColor('#000000');
+    sheet.getRange(rowNumber, CUSTOMER_RETURN_TIME_COL).setFontColor('#000000');
+
+    sheet.getRange(rowNumber, CUSTOMER_SITUATION_COL).setValue('Returned');
+
+    verifyCell('customer', rowNumber, CUSTOMER_TOTAL_PRICE_COL, returnAmount, 'old bike: total price after swap');
+    verifyCell('customer', rowNumber, CUSTOMER_RETURN_DATE_COL, todayValue, 'old bike: return date');
+    verifyCell('customer', rowNumber, CUSTOMER_SITUATION_COL, 'Returned', 'old bike: situation');
+
+    // ---- 2) Append a brand-new row for the new bike, covering the
+    // remainder of the original rental window: today through the ORIGINAL
+    // return date (read above, before it was overwritten). Dates are
+    // written as plain dd/MM/yyyy strings, same convention the ordinary
+    // customer-intake branch of doPost uses below. ----
+    var todayDmy = Utilities.formatDate(todayValue, ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy');
+    var origReturnDmy = (origReturnDateRaw instanceof Date)
+      ? Utilities.formatDate(origReturnDateRaw, ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy')
+      : (origReturnDateRaw || '').toString().trim();
+
+    // The new row's total price includes any upgrade charge on top of the
+    // swap's redistributed remainder.
+    var newRowTotalPrice = newBikeAmount + additionalAmount;
+
+    sheet.appendRow([
+      Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'dd/MM/yyyy'),
+      contact,
+      name,
+      nationality,
+      passport,
+      newBikeModel,
+      '',
+      todayDmy,
+      origReturnDmy,
+      origReturnTime,
+      deliverToHotel,
+      newRowTotalPrice,
+      paidBy,
+      '',
+      '', // O: deposit method -- not applicable to a swap
+      ''  // P: source -- left blank for a swap row, unlike "Direct"/"Extend"
+    ]);
+
+    var newRow = sheet.getLastRow();
+    sheet.getRange(newRow, 1, 1, 16).setBorder(true, true, true, true, true, true);
+
+    verifyCell('customer', newRow, CUSTOMER_BIKE_COL, newBikeModel, 'new bike: bike model');
+    verifyCell('customer', newRow, CUSTOMER_RENTFROM_COL, todayDmy, 'new bike: renting-from date');
+    verifyCell('customer', newRow, CUSTOMER_RETURN_DATE_COL, origReturnDmy, 'new bike: return date');
+    verifyCell('customer', newRow, CUSTOMER_TOTAL_PRICE_COL, newRowTotalPrice, 'new bike: total price');
+
+    // ---- 3) Update the "bikes" sheet's per-bike monthly totals. The rule
+    // throughout this app is: money is recorded in the month it actually
+    // came in. The swap's redistributed remainder (newBikeAmount) isn't
+    // new money -- it's the same payment the customer already made back
+    // when the original contract started, just moving from the old bike to
+    // the new one -- so BOTH sides of that move belong in the ORIGINAL
+    // rental's start month: the old bike's column goes down by
+    // newBikeAmount there, and the new bike's column goes up by the same
+    // newBikeAmount there too, in that same month (they net out to zero
+    // extra impact on that month's totals, which is correct -- nothing new
+    // was actually received).
+    //
+    // The additional/upgrade amount (if any) IS brand-new money, received
+    // today -- so that portion, and only that portion, is added to the new
+    // bike's column in the CURRENT month, as a separate write from the
+    // above. ----
+    var warnings = [];
+    var startDateForMonth = (origRentFromRaw instanceof Date)
+      ? origRentFromRaw
+      : parseDmyOrIsoToDate_swap(origRentFromRaw);
+    var origMonthName = startDateForMonth
+      ? Utilities.formatDate(startDateForMonth, ss.getSpreadsheetTimeZone(), 'MMMM')
+      : null;
+    var currentMonthName = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'MMMM');
+
+    if (!origMonthName) {
+      warnings.push('Could not determine the original rental\'s start month -- the "bikes" sheet totals for "' +
+        oldBikeModel + '" and "' + newBikeModel + '" were NOT adjusted for the redistributed remainder. Please adjust them by hand.');
+    } else {
+      try {
+        addRentalAmountToBikesSheet(ss, oldBikeModel, -newBikeAmount, origMonthName);
+      } catch (bikesErr1) {
+        warnings.push('Bikes sheet (' + oldBikeModel + '): ' + bikesErr1.message);
+      }
+      try {
+        addRentalAmountToBikesSheet(ss, newBikeModel, newBikeAmount, origMonthName);
+      } catch (bikesErr2) {
+        warnings.push('Bikes sheet (' + newBikeModel + '): ' + bikesErr2.message);
+      }
+    }
+
+    if (additionalAmount > 0) {
+      try {
+        addRentalAmountToBikesSheet(ss, newBikeModel, additionalAmount, currentMonthName);
+      } catch (bikesErr3) {
+        warnings.push('Bikes sheet (' + newBikeModel + ' upgrade): ' + bikesErr3.message);
+      }
+    }
+
+    // ---- 4) If an upgrade/additional amount was charged, log it as a
+    // brand-new income entry -- the EXACT same write path as the Accounts
+    // page's own "Add Income" button (locateAccountsSheet +
+    // getAccountsFreeRow, same F-J columns), landing on the CURRENT
+    // month's sheet. Cash/Wise/Revolut routing mirrors addIncomeRow
+    // exactly. Wrapped so a problem here never rolls back the swap itself,
+    // which has already been saved above. ----
+    if (additionalAmount > 0) {
+      try {
+        var incomeSheet = locateAccountsSheet();
+        var freeRow = getAccountsFreeRow(incomeSheet, 'income');
+        var incRow = freeRow.row;
+        var upgradeDescription = newBikeModel + ' upgrade';
+
+        incomeSheet.getRange(incRow, 6).setValue(todayDmy);
+        incomeSheet.getRange(incRow, 7).setValue(upgradeDescription);
+        incomeSheet.getRange(incRow, 8).setValue(name || '');
+        incomeSheet.getRange(incRow, 9).setValue(additionalAmount);
+        incomeSheet.getRange(incRow, 10).setValue(additionalPaidBy);
+
+        verifyCell(incomeSheet.getName(), incRow, 7, upgradeDescription, 'upgrade income row: description');
+        verifyCell(incomeSheet.getName(), incRow, 9, additionalAmount, 'upgrade income row: amount');
+        verifyCell(incomeSheet.getName(), incRow, 10, additionalPaidBy, 'upgrade income row: paid by');
+
+        var additionalPaidByLower = additionalPaidBy.toLowerCase();
+        try {
+          if (additionalPaidByLower === 'cash') {
+            appendCashSheetRowText(ss, upgradeDescription, additionalAmount);
+          }
+        } catch (upgradeCashErr) {
+          warnings.push('Upgrade cash sheet: ' + upgradeCashErr.message);
+        }
+        try {
+          if (additionalPaidByLower === 'wise' || additionalPaidByLower === 'revolut') {
+            processDepositForPayment(ss, additionalPaidByLower, additionalAmount);
+          }
+        } catch (upgradeDepositErr) {
+          warnings.push('Upgrade deposit total: ' + upgradeDepositErr.message);
+        }
+      } catch (upgradeIncomeErr) {
+        warnings.push('Upgrade income entry: ' + upgradeIncomeErr.message);
+      }
+    }
+
+    var responsePayload = { success: true, newRowNumber: newRow };
+    var verification = runWriteVerification(ss);
+    warnings = warnings.concat(verification.problems);
+    if (warnings.length) responsePayload.warning = warnings.join(' ');
+
+    return ContentService
+      .createTextOutput(JSON.stringify(responsePayload))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// Parses either a dd/MM/yyyy string or an ISO yyyy-MM-dd string into a real
+// Date -- used by swapBike when the customer sheet's "renting from" cell
+// was stored as plain text rather than a real Date value.
+function parseDmyOrIsoToDate_swap(raw) {
+  var s = (raw || '').toString().trim();
+  if (!s) return null;
+  var dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (dmy) {
+    return new Date(parseInt(dmy[3], 10), parseInt(dmy[2], 10) - 1, parseInt(dmy[1], 10));
+  }
+  var iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) {
+    return new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10));
+  }
+  return null;
+}
+
 // ---- Bike Photos: Drive-backed storage ----
 // One subfolder per bike, named exactly as the bike appears in the Parts
 // and Oil change tab, sitting inside PHOTOS_ROOT_FOLDER_ID. Created lazily
@@ -1515,6 +2955,9 @@ function doGet(e) {
     if (e.parameter.action === 'bikesList') {
       return getBikesListNames();
     }
+    if (e.parameter.action === 'contracts') {
+      return getContractRows();
+    }
 
     // ---- Customer-search behavior ----
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1552,6 +2995,52 @@ function doGet(e) {
       .createTextOutput(JSON.stringify({ success: true, rows: rows }))
       .setMimeType(ContentService.MimeType.JSON);
 
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- Serve the "Contract" tab for contract.html's search view. Column
+// order matches addContractEntry's writer above. ----
+function getContractRows() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Contract');
+    if (!sheet) {
+      throw new Error('Sheet named "Contract" not found in this spreadsheet.');
+    }
+
+    var values = sheet.getDataRange().getValues();
+    var keys = ['date','contact','number','name','nationality','passport','bikeModel',
+                'rentingDateFrom','returnDate','returnTime','deliverToHotel',
+                'totalPrice','paidBy','deposit','depositAmount','deliveryFee','status',
+                'contractDocUrl','contractPdfUrl','passportPhotoUrl'];
+    var tz = ss.getSpreadsheetTimeZone();
+
+    function cellToString(key, val) {
+      if (val instanceof Date) {
+        if (key === 'returnTime') {
+          return Utilities.formatDate(val, tz, 'HH:mm');
+        }
+        return Utilities.formatDate(val, tz, 'dd/MM/yyyy');
+      }
+      return val !== undefined && val !== null ? String(val) : '';
+    }
+
+    var rows = values.slice(HEADER_ROWS).map(function(row, i) {
+      var obj = {};
+      keys.forEach(function(k, ki) {
+        obj[k] = cellToString(k, row[ki]);
+      });
+      obj.rowNumber = HEADER_ROWS + i + 1; // 1-indexed sheet row this record lives on
+      return obj;
+    }).filter(function(r) { return r.name !== ''; });
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, rows: rows }))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService
       .createTextOutput(JSON.stringify({ success: false, error: err.message }))
@@ -1670,6 +3159,67 @@ var DEPOSIT_CATEGORIES = [
   { key: 'revolut', label: 'Revolut', header: 'deposit revolut', dateCol: 22, amountCol: 23, nameCol: 24 } // V, W, X
 ];
 
+// ---- Fixed-cell summary figures shown at the top of the Accounts page --
+// confirmed against a screenshot of the "July" sheet with Anton on
+// 2026-07-09. "row" is where the label is EXPECTED to be; readAccountsSummaryItem
+// below re-validates the label there and, if it's drifted, searches the
+// whole column for it (via findDepositRow, the same self-healing lookup
+// already used for the Wise/Revolut deposit cells) before giving up and
+// warning instead of silently showing the wrong figure. expectedLabel is
+// matched case/whitespace-insensitively against the sheet's own (sometimes
+// misspelled -- "bussiness", "invesment", "busniness") text; displayLabel
+// is the clean text actually shown in the UI.
+var ACCOUNTS_SUMMARY_ITEMS = {
+  // B/C, starting row 146.
+  expense: [
+    { row: 146, labelCol: 2, valueCol: 3, expectedLabel: 'total expenses', displayLabel: 'Total expenses' },
+    { row: 147, labelCol: 2, valueCol: 3, expectedLabel: 'bussiness expenses', displayLabel: 'Business expenses' },
+    { row: 148, labelCol: 2, valueCol: 3, expectedLabel: 'personal expenses total', displayLabel: 'Personal expenses' },
+    { row: 149, labelCol: 2, valueCol: 3, expectedLabel: 'wages and bike purchase', displayLabel: 'Wages & bike purchases' }
+  ],
+  // G/I, starting row 146 -- column H is a blank spacer, deliberately skipped.
+  income: [
+    { row: 146, labelCol: 7, valueCol: 9, expectedLabel: 'income for month', displayLabel: 'Income' },
+    { row: 147, labelCol: 7, valueCol: 9, expectedLabel: 'income less invesment', displayLabel: 'Income (less investment)' },
+    { row: 148, labelCol: 7, valueCol: 9, expectedLabel: '% of bussiness expenses vs income', displayLabel: 'Business exp. % of income' },
+    { row: 149, labelCol: 7, valueCol: 9, expectedLabel: '% of total busniness and personal vs income', displayLabel: 'Total exp. % of income' }
+  ],
+  // J/K, starting row 147 (row 146 is blank here, unlike the two blocks above).
+  profit: [
+    { row: 147, labelCol: 10, valueCol: 11, expectedLabel: 'net profit', displayLabel: 'Net profit' },
+    { row: 148, labelCol: 10, valueCol: 11, expectedLabel: 'actual profit', displayLabel: 'Actual profit' }
+  ],
+  // L/M -- specific fixed rows (not a contiguous block), same cells
+  // processDepositForPayment already writes the Wise/Revolut running
+  // totals into (L11/M11, L12/M12).
+  deposit: [
+    { row: 3,  labelCol: 12, valueCol: 13, expectedLabel: 'cash', displayLabel: 'Cash' },
+    { row: 6,  labelCol: 12, valueCol: 13, expectedLabel: 'bank', displayLabel: 'Bank' },
+    { row: 11, labelCol: 12, valueCol: 13, expectedLabel: 'wise(less deposit)', displayLabel: 'Wise (less deposit)' },
+    { row: 12, labelCol: 12, valueCol: 13, expectedLabel: 'revolut(less deposit)', displayLabel: 'Revolut (less deposit)' },
+    { row: 9,  labelCol: 12, valueCol: 13, expectedLabel: 'total (cash + bank+wise)', displayLabel: 'Total (cash + bank + wise)' }
+  ]
+};
+
+// ---- Reads one summary figure for the Accounts page top strip. Re-locates
+// the label via findDepositRow (checks the expected row first, then
+// searches the whole column) before reading the value next to it, so a
+// row shifting up/down a bit doesn't silently show the wrong number. Value
+// is read with getDisplayValue() so it comes back exactly as formatted on
+// the sheet (currency symbol, %, etc.) -- no reformatting needed
+// client-side. Pushes a message onto `warnings` and returns value: null if
+// the label can't be found anywhere in the column. ----
+function readAccountsSummaryItem(sheet, item, warnings) {
+  var row = findDepositRow(sheet, item.row, item.labelCol, item.expectedLabel);
+  if (row === null) {
+    warnings.push('Could not find "' + item.expectedLabel + '" in column ' + columnToLetter(item.labelCol) +
+      ' of "' + sheet.getName() + '" (expected near row ' + item.row + ') -- "' + item.displayLabel + '" is not shown.');
+    return { label: item.displayLabel, value: null };
+  }
+  var value = sheet.getRange(row, item.valueCol).getDisplayValue().toString().trim();
+  return { label: item.displayLabel, value: value };
+}
+
 // ---- Plain Levenshtein edit distance, used only to tolerate typos in a
 // month tab's name (e.g. "Feburary" should still resolve to February). ----
 function levenshteinDistance(a, b) {
@@ -1751,8 +3301,19 @@ var EXPENSE_TYPE_COLORS = {
 // to Business (no fill), so a row is never left with a stray color from a
 // previous classification if the new save doesn't specify one. ----
 function applyExpenseTypeColor(sheet, row, type) {
-  var key = (type || 'business').toString().trim().toLowerCase();
-  var color = EXPENSE_TYPE_COLORS.hasOwnProperty(key) ? EXPENSE_TYPE_COLORS[key] : null;
+  var raw = (type || 'business').toString().trim();
+  // Case-INSENSITIVE match against EXPENSE_TYPE_COLORS' keys, but looked up
+  // using the correctly-cased key that was actually found -- NOT
+  // raw.toLowerCase() itself. EXPENSE_TYPE_COLORS has a camelCase key
+  // ('transferComplete'); naively lowercasing the input before the object
+  // lookup turns it into 'transfercomplete', which doesn't match that key,
+  // so it silently fell through to the null/no-color (Business-looking)
+  // fallback every time -- "Transfer Complete" could never actually be set,
+  // from either this button or the Edit Expense dropdown.
+  var matchedKey = Object.keys(EXPENSE_TYPE_COLORS).filter(function(k) {
+    return k.toLowerCase() === raw.toLowerCase();
+  })[0];
+  var color = matchedKey ? EXPENSE_TYPE_COLORS[matchedKey] : null;
   sheet.getRange(row, 2).setBackground(color);
 }
 
@@ -1775,6 +3336,67 @@ function expenseTypeFromColor(hex) {
     if (colorVal && h === colorVal) return key;
   }
   return 'business';
+}
+
+// ---- action:'bulkSetExpenseType' -- Accounts page, the "Complete
+// Transfers" (To Transfer -> Transfer Complete) and "Transfer Completed"
+// (Transfer Complete -> Business) buttons at the bottom of the Expenses
+// list. data: { monthIndex, rows: [sheet row numbers], fromType, toType }.
+//
+// The rows list comes from whatever the page had already loaded and shown
+// to Anton in the confirmation dialog -- but rather than trusting that
+// list blindly, each row's CURRENT color is re-read fresh here and only
+// recolored if it still matches fromType. Anything that's since changed
+// (edited elsewhere, or the page was stale) is skipped and reported back
+// as a warning instead of being silently overwritten -- same "don't
+// silently do the wrong thing" rule the rest of this file follows. ----
+function bulkSetExpenseType(data) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var monthIndex = Math.max(0, Math.min(11, Math.round(Number(data.monthIndex))));
+    var targetMonthName = ACCOUNTS_MONTH_NAMES[monthIndex];
+    var sheet = findMonthSheetFuzzy(ss, targetMonthName);
+    if (!sheet) {
+      throw new Error('No sheet found matching "' + targetMonthName + '".');
+    }
+
+    var fromType = (data.fromType || '').toString().trim();
+    var toType = (data.toType || '').toString().trim();
+    if (!EXPENSE_TYPE_COLORS.hasOwnProperty(fromType) || !EXPENSE_TYPE_COLORS.hasOwnProperty(toType)) {
+      throw new Error('Unrecognized expense type -- nothing was changed.');
+    }
+
+    var rows = Array.isArray(data.rows) ? data.rows : [];
+    var changed = [];
+    var skipped = [];
+
+    rows.forEach(function(rawRow) {
+      var row = parseInt(rawRow, 10);
+      if (!row || row < 2) { skipped.push(rawRow); return; }
+      var currentColor = sheet.getRange(row, 2).getBackground();
+      var currentType = expenseTypeFromColor(currentColor);
+      if (currentType !== fromType) {
+        skipped.push(row);
+        return;
+      }
+      applyExpenseTypeColor(sheet, row, toType);
+      changed.push(row);
+    });
+
+    var responsePayload = { success: true, changed: changed.length, changedRows: changed, skippedRows: skipped };
+    if (skipped.length) {
+      responsePayload.warning = skipped.length + ' row(s) were skipped because their type had already changed since the list was loaded -- please refresh and try again if needed.';
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify(responsePayload))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 // ---- Optional "which bike(s) is this expense split across" link, stored
@@ -1835,6 +3457,80 @@ function setExpenseBikeSplits(sheet, row, splits) {
     })
     .filter(function(s) { return s.bike && s.amount !== ''; });
   sheet.getRange(row, 2).setNote(clean.length ? JSON.stringify(clean) : '');
+}
+
+// ---- Same idea as getExpenseBikeSplits/setExpenseBikeSplits above, but
+// for the INCOME side -- the note lives on the income description cell
+// (column G) instead of the expense description cell (column B). Used by
+// the Accounts page's manual "Add Income" flow so a staff member can
+// optionally attribute the money to one or more specific bikes instead of
+// the default "extras" row. Unlike the expense side, there's no legacy
+// plain-bike-name note format to fall back to here -- this note format
+// only ever existed as the JSON-array form, so an empty note always means
+// "nothing recorded" rather than needing a fallbackAmount guess. ----
+function getIncomeBikeSplits(sheet, row) {
+  return parseExpenseBikeSplitsNote(sheet.getRange(row, 7).getNote(), '');
+}
+
+function setIncomeBikeSplits(sheet, row, splits) {
+  var clean = (splits || [])
+    .map(function(s) {
+      var bike = (s && s.bike || '').toString().trim();
+      var amt = (s && s.amount !== '' && s.amount !== null && s.amount !== undefined && !isNaN(Number(s.amount)))
+        ? Number(s.amount) : '';
+      return { bike: bike, amount: amt };
+    })
+    .filter(function(s) { return s.bike && s.amount !== ''; });
+  sheet.getRange(row, 7).setNote(clean.length ? JSON.stringify(clean) : '');
+}
+
+// ---- Cleans a raw {bike, amount} split list (as submitted by the
+// client) down to only valid entries, then -- if nothing valid survived --
+// falls back to a single implicit "extras" split covering the row's whole
+// amount. This is the shared "where did manually-added income go on the
+// bikes sheet" rule: explicit bike(s) chosen -> goes to those bikes;
+// nothing chosen -> goes to "extras". Shared by addIncomeRow and
+// editIncomeRow so both apply the exact same rule. ----
+function resolveIncomeBikeSplits(rawSplits, amount) {
+  var clean = (Array.isArray(rawSplits) ? rawSplits : [])
+    .map(function(s) {
+      var bike = (s && s.bike || '').toString().trim();
+      var amt = Number(s && s.amount);
+      return { bike: bike, amount: (s && s.amount !== '' && !isNaN(amt)) ? amt : '' };
+    })
+    .filter(function(s) { return s.bike && s.amount !== ''; });
+  if (clean.length) return clean;
+  var amt = (amount === '' || amount === undefined || amount === null || isNaN(Number(amount)) || Number(amount) === 0)
+    ? '' : Number(amount);
+  return amt === '' ? [] : [{ bike: 'extras', amount: amt }];
+}
+
+// ---- True only if two {bike, amount} split lists cover the exact same
+// bikes for the exact same amounts (order doesn't matter). Used by
+// editExpenseRow to skip the "bikes" sheet subtract-old/add-new
+// reconciliation entirely when neither the bike nor the amount actually
+// changed -- e.g. an edit that only changes the expense type (like
+// "Transfer" -> "Transfer Complete") or only the description, or both
+// together. Skipping in that case isn't just an optimization: two
+// back-to-back writes to the SAME cell in one request (subtract then add
+// back the identical amount) is exactly the situation that produced a
+// false-positive "CHECK FAILED" popup, since the second write's
+// before-value read could be stale. Comparing first and skipping when
+// nothing bike/amount-related changed avoids that pair of writes
+// altogether whenever they'd be a no-op anyway. ----
+function expenseBikeSplitsUnchanged(oldSplits, newSplits) {
+  function normalize(list) {
+    return (list || [])
+      .map(function(s) { return (s.bike || '').toString().trim().toLowerCase() + '|' + Number(s.amount); })
+      .sort();
+  }
+  var a = normalize(oldSplits);
+  var b = normalize(newSplits);
+  if (a.length !== b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
 }
 
 // ---- Fixed labeled rows further down each month sheet ("personal
@@ -1991,6 +3687,7 @@ function getAccountsData(monthIndexRaw) {
       var combined = sheet.getRange(2, 1, lastRow - 1, 10).getValues();
       var expenseColColors = sheet.getRange(2, 2, lastRow - 1, 1).getBackgrounds();
       var expenseColNotes = sheet.getRange(2, 2, lastRow - 1, 1).getNotes();
+      var incomeColNotes = sheet.getRange(2, 7, lastRow - 1, 1).getNotes();
       var prevBlank = false;
       for (var idx = 0; idx < combined.length; idx++) {
         var r = combined[idx];
@@ -2037,21 +3734,37 @@ function getAccountsData(monthIndexRaw) {
             income: incomeLabel,
             name: (r[7] || '').toString().trim(),
             amount: (iAmountEmpty || isNaN(Number(iAmount))) ? '' : Number(iAmount),
-            paidBy: (r[9] || '').toString().trim()
+            paidBy: (r[9] || '').toString().trim(),
+            bikeSplits: parseExpenseBikeSplitsNote(incomeColNotes[idx] && incomeColNotes[idx][0], '')
           });
         }
       }
     }
 
+    // Top-of-page summary strip: expense/income/profit/deposit figures read
+    // straight from their fixed cells on this same month sheet -- see
+    // ACCOUNTS_SUMMARY_ITEMS above for exactly which cells and why.
+    var summaryWarnings = [];
+    var summary = {
+      expense: ACCOUNTS_SUMMARY_ITEMS.expense.map(function(item) { return readAccountsSummaryItem(sheet, item, summaryWarnings); }),
+      income: ACCOUNTS_SUMMARY_ITEMS.income.map(function(item) { return readAccountsSummaryItem(sheet, item, summaryWarnings); }),
+      profit: ACCOUNTS_SUMMARY_ITEMS.profit.map(function(item) { return readAccountsSummaryItem(sheet, item, summaryWarnings); }),
+      deposit: ACCOUNTS_SUMMARY_ITEMS.deposit.map(function(item) { return readAccountsSummaryItem(sheet, item, summaryWarnings); })
+    };
+
+    var responsePayload = {
+      success: true,
+      monthIndex: monthIndex,
+      month: targetMonthName,
+      sheetName: sheet.getName(),
+      expenses: expenses,
+      income: income,
+      summary: summary
+    };
+    if (summaryWarnings.length) responsePayload.warning = summaryWarnings.join(' ');
+
     return ContentService
-      .createTextOutput(JSON.stringify({
-        success: true,
-        monthIndex: monthIndex,
-        month: targetMonthName,
-        sheetName: sheet.getName(),
-        expenses: expenses,
-        income: income
-      }))
+      .createTextOutput(JSON.stringify(responsePayload))
       .setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
@@ -2151,6 +3864,48 @@ function getDepositsData() {
       deposits = deposits.concat(rowsFound);
     });
 
+    // Category totals shown at the top of the Deposits page -- row 15 (in
+    // the same date/amount columns as the category's own list above, via
+    // DEPOSIT_CATEGORIES) holds each category's own "total" of the visible
+    // list; Wise and Revolut additionally have a running "total wise" /
+    // "total revolut" figure right underneath at row 16 (Bank/Scan has no
+    // second figure there). Labels are re-checked against what's actually
+    // in the cell before trusting the value next to it, same "don't
+    // silently read the wrong cell" rule used everywhere else in this file.
+    var summary = {};
+    DEPOSIT_CATEGORIES.forEach(function(cat) {
+      var entry = {};
+      var totalRow = 15;
+      var totalLabelRaw = sheet.getRange(totalRow, cat.dateCol).getValue();
+      if (norm(totalLabelRaw).indexOf('total') === 0) {
+        entry.total = {
+          label: cellToString(totalLabelRaw),
+          value: sheet.getRange(totalRow, cat.amountCol).getDisplayValue().toString().trim()
+        };
+      } else {
+        warnings.push('"' + sheet.getName() + '" sheet: expected a "total" label at ' +
+          columnToLetter(cat.dateCol) + totalRow + ' for ' + cat.label + ' but found "' +
+          (totalLabelRaw || '(blank)') + '" -- ' + cat.label + ' total not shown.');
+      }
+
+      if (cat.key !== 'bank') {
+        var rtRow = 16;
+        var rtLabelRaw = sheet.getRange(rtRow, cat.dateCol).getValue();
+        if (norm(rtLabelRaw).indexOf('total') === 0) {
+          entry.runningTotal = {
+            label: cellToString(rtLabelRaw),
+            value: sheet.getRange(rtRow, cat.amountCol).getDisplayValue().toString().trim()
+          };
+        } else {
+          warnings.push('"' + sheet.getName() + '" sheet: expected a running-total label at ' +
+            columnToLetter(cat.dateCol) + rtRow + ' for ' + cat.label + ' but found "' +
+            (rtLabelRaw || '(blank)') + '" -- ' + cat.label + ' running total not shown.');
+        }
+      }
+
+      summary[cat.key] = entry;
+    });
+
     return ContentService
       .createTextOutput(JSON.stringify({
         success: true,
@@ -2158,6 +3913,7 @@ function getDepositsData() {
         month: monthName,
         sheetName: sheet.getName(),
         deposits: deposits,
+        summary: summary,
         warnings: warnings
       }))
       .setMimeType(ContentService.MimeType.JSON);
@@ -2854,28 +4610,36 @@ function editExpenseRow(data) {
     // added, is naturally handled too, since old and new are reconciled
     // independently. Each split is wrapped on its own so one bad bike
     // name doesn't stop the rest from being reconciled.
-    var oldBikeWarnings = [];
-    oldBikeSplits.forEach(function(s) {
-      try {
-        addRentalAmountToBikesSheet(ss, s.bike, -s.amount, sheet.getName(), BIKES_EXPENSE_SECTION_START_ROW);
-      } catch (e) {
-        oldBikeWarnings.push(e.message);
-      }
-    });
-    if (oldBikeWarnings.length) warnings.push('Bikes sheet (removing old expense): ' + oldBikeWarnings.join(' '));
+    //
+    // Entirely skipped when the splits themselves (bike + amount) didn't
+    // change -- e.g. an edit that only changes the type (Transfer ->
+    // Transfer Complete) or the description, or both. Nothing on the
+    // "bikes" sheet needs touching in that case, and skipping avoids a
+    // pointless subtract-then-add-back pair of writes to the same cell.
+    if (!expenseBikeSplitsUnchanged(oldBikeSplits, newBikeSplits)) {
+      var oldBikeWarnings = [];
+      oldBikeSplits.forEach(function(s) {
+        try {
+          addRentalAmountToBikesSheet(ss, s.bike, -s.amount, sheet.getName(), BIKES_EXPENSE_SECTION_START_ROW);
+        } catch (e) {
+          oldBikeWarnings.push(e.message);
+        }
+      });
+      if (oldBikeWarnings.length) warnings.push('Bikes sheet (removing old expense): ' + oldBikeWarnings.join(' '));
 
-    var newBikeWarnings = [];
-    newBikeSplits.forEach(function(s) {
-      var bike = (s && s.bike || '').toString().trim();
-      var amt = Number(s && s.amount);
-      if (!bike || s.amount === '' || isNaN(amt)) return;
-      try {
-        addRentalAmountToBikesSheet(ss, bike, amt, sheet.getName(), BIKES_EXPENSE_SECTION_START_ROW);
-      } catch (e) {
-        newBikeWarnings.push(e.message);
-      }
-    });
-    if (newBikeWarnings.length) warnings.push('Bikes sheet (adding new expense): ' + newBikeWarnings.join(' '));
+      var newBikeWarnings = [];
+      newBikeSplits.forEach(function(s) {
+        var bike = (s && s.bike || '').toString().trim();
+        var amt = Number(s && s.amount);
+        if (!bike || s.amount === '' || isNaN(amt)) return;
+        try {
+          addRentalAmountToBikesSheet(ss, bike, amt, sheet.getName(), BIKES_EXPENSE_SECTION_START_ROW);
+        } catch (e) {
+          newBikeWarnings.push(e.message);
+        }
+      });
+      if (newBikeWarnings.length) warnings.push('Bikes sheet (adding new expense): ' + newBikeWarnings.join(' '));
+    }
 
     // Reconcile the Personal/Wages running totals if the classification
     // changed -- an amount-only change needs nothing here, since the
@@ -2993,6 +4757,13 @@ function addIncomeRow(data) {
         ? '' : Number(data.amount), 'income row: amount');
     verifyCell(sheet.getName(), row, 10, data.paidBy || '', 'income row: paid by');
 
+    // Which bike(s) (if any) this income is attributed to on the "bikes"
+    // sheet -- explicit choices from the "split across bikes" UI, or an
+    // implicit single "extras" split if none were chosen. Stored as a note
+    // on the description cell so a later edit can reconcile against it.
+    var incomeBikeSplits = resolveIncomeBikeSplits(data.incomeBikeSplits, data.amount);
+    setIncomeBikeSplits(sheet, row, incomeBikeSplits);
+
     var warnings = [];
     var paidByLower = (data.paidBy || '').toString().trim().toLowerCase();
 
@@ -3019,6 +4790,24 @@ function addIncomeRow(data) {
     } catch (spendErr) {
       warnings.push('Deposit spend: ' + spendErr.message);
     }
+
+    // Apply each split to its bike's cell on the "bikes" sheet (income
+    // table, this accounts sheet's own month) -- either the bike(s) the
+    // staff member explicitly chose, or "extras" by default when none were
+    // chosen. Each split is wrapped independently so one bad bike name
+    // doesn't stop the rest from being applied. (Swap Bike's own income
+    // write does NOT go through this function -- it already attributes
+    // money to the actual bike's row via addRentalAmountToBikesSheet, so
+    // this must not double up for swaps.)
+    var bikeWarnings = [];
+    incomeBikeSplits.forEach(function(s) {
+      try {
+        addRentalAmountToBikesSheet(ss, s.bike, s.amount, sheet.getName());
+      } catch (bikeErr) {
+        bikeWarnings.push(bikeErr.message);
+      }
+    });
+    if (bikeWarnings.length) warnings.push('Bikes sheet (income): ' + bikeWarnings.join(' '));
 
     // Post-write verification: re-read everything this add wrote and
     // confirm it actually landed where it should.
@@ -3084,6 +4873,18 @@ function editIncomeRow(data) {
     var newPaidByLower = (data.paidBy || '').toString().trim().toLowerCase();
     var newGeneralText = buildGeneralIncomeText(data);
 
+    // Which bike(s) this row is attributed to on the "bikes" sheet, before
+    // and after this edit -- see resolveIncomeBikeSplits for the default-
+    // to-"extras" rule. Skipped (forced to []) on the NEW side when the
+    // description still looks like an auto-generated rental/extension line
+    // (extractBikeNameFromRentalIncomeText matches) -- that case is already
+    // fully handled by the dedicated rental-income reconciliation further
+    // down, and must not also get an implicit "extras" split.
+    var oldRentalBikeName = extractBikeNameFromRentalIncomeText(oldIncome);
+    var newRentalBikeName = extractBikeNameFromRentalIncomeText(data.income);
+    var oldBikeSplits = getIncomeBikeSplits(sheet, row);
+    var newBikeSplits = newRentalBikeName ? [] : resolveIncomeBikeSplits(data.incomeBikeSplits, newAmount);
+
     var wasCash = oldPaidByLower === 'cash';
     var isCash = newPaidByLower === 'cash';
 
@@ -3111,6 +4912,7 @@ function editIncomeRow(data) {
     sheet.getRange(row, 8).setValue(data.name || '');
     sheet.getRange(row, 9).setValue(newAmount);
     sheet.getRange(row, 10).setValue(data.paidBy || '');
+    setIncomeBikeSplits(sheet, row, newBikeSplits);
     verifyCell(sheet.getName(), row, 6, formatIsoDateToDMY(data.date) || '', 'edited income row: date');
     verifyCell(sheet.getName(), row, 7, data.income || '', 'edited income row: description');
     verifyCell(sheet.getName(), row, 8, data.name || '', 'edited income row: name');
@@ -3169,20 +4971,48 @@ function editIncomeRow(data) {
     // alone entirely -- there's nothing on the "bikes" sheet to reconcile.
     var accountsMonthName = sheet.getName();
     try {
-      var oldBikeName = extractBikeNameFromRentalIncomeText(oldIncome);
-      if (oldBikeName && oldAmount !== '') {
-        addRentalAmountToBikesSheet(ss, oldBikeName, -oldAmount, accountsMonthName);
+      if (oldRentalBikeName && oldAmount !== '') {
+        addRentalAmountToBikesSheet(ss, oldRentalBikeName, -oldAmount, accountsMonthName);
       }
     } catch (bikeRevertErr) {
       warnings.push('Bikes sheet (removing old amount): ' + bikeRevertErr.message);
     }
     try {
-      var newBikeName = extractBikeNameFromRentalIncomeText(data.income);
-      if (newBikeName && newAmount !== '') {
-        addRentalAmountToBikesSheet(ss, newBikeName, newAmount, accountsMonthName);
+      if (newRentalBikeName && newAmount !== '') {
+        addRentalAmountToBikesSheet(ss, newRentalBikeName, newAmount, accountsMonthName);
       }
     } catch (bikeApplyErr) {
       warnings.push('Bikes sheet (adding new amount): ' + bikeApplyErr.message);
+    }
+
+    // ---- "bikes" sheet reconciliation -- manual bike-split attribution ----
+    // Separate from the rental-line reconciliation just above: this handles
+    // a manually-added income row's own "split across bikes" (or implicit
+    // "extras") attribution. Subtracts whatever it was previously
+    // attributed to, then adds whatever it's attributed to now -- skipped
+    // entirely when the attribution didn't actually change, so a same-bike/
+    // same-amount edit doesn't do a pointless subtract-then-add-back pair
+    // of writes to the same cell.
+    if (!expenseBikeSplitsUnchanged(oldBikeSplits, newBikeSplits)) {
+      var oldIncomeBikeWarnings = [];
+      oldBikeSplits.forEach(function(s) {
+        try {
+          addRentalAmountToBikesSheet(ss, s.bike, -s.amount, accountsMonthName);
+        } catch (e) {
+          oldIncomeBikeWarnings.push(e.message);
+        }
+      });
+      if (oldIncomeBikeWarnings.length) warnings.push('Bikes sheet (removing old income split): ' + oldIncomeBikeWarnings.join(' '));
+
+      var newIncomeBikeWarnings = [];
+      newBikeSplits.forEach(function(s) {
+        try {
+          addRentalAmountToBikesSheet(ss, s.bike, s.amount, accountsMonthName);
+        } catch (e) {
+          newIncomeBikeWarnings.push(e.message);
+        }
+      });
+      if (newIncomeBikeWarnings.length) warnings.push('Bikes sheet (adding new income split): ' + newIncomeBikeWarnings.join(' '));
     }
 
     // Post-write verification: re-read everything this edit wrote and
@@ -3333,6 +5163,7 @@ function deleteIncomeRow(data) {
     var amountRaw = sheet.getRange(row, 9).getValue();
     var amount = (amountRaw === '' || amountRaw === null || isNaN(Number(amountRaw))) ? '' : Number(amountRaw);
     var paidByLower = (sheet.getRange(row, 10).getValue() || '').toString().trim().toLowerCase();
+    var incomeBikeSplits = getIncomeBikeSplits(sheet, row);
 
     var resolvedCashRow = null;
     if (paidByLower === 'cash') {
@@ -3383,6 +5214,21 @@ function deleteIncomeRow(data) {
     } catch (bikeErr) {
       warnings.push('Bikes sheet: ' + bikeErr.message);
     }
+
+    // Same reason -- if this was a manually-added income entry split
+    // across one or more bikes (or defaulted to "extras"), remove each
+    // split's contribution from that bike's cell in the "bikes" sheet's
+    // income table before the row's cells (and the note carrying this
+    // link) are deleted below.
+    var deleteIncomeBikeWarnings = [];
+    incomeBikeSplits.forEach(function(s) {
+      try {
+        addRentalAmountToBikesSheet(ss, s.bike, -s.amount, sheet.getName());
+      } catch (e) {
+        deleteIncomeBikeWarnings.push(e.message);
+      }
+    });
+    if (deleteIncomeBikeWarnings.length) warnings.push('Bikes sheet (income split): ' + deleteIncomeBikeWarnings.join(' '));
 
     // Delete just F:J for this row, shifting everything below -- in those
     // columns only -- up. The expense side (A-D) of this same row, if any,
