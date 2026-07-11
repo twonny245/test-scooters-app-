@@ -348,6 +348,13 @@
       <label for="e_passport">Passport number</label>
       <input id="e_passport">
 
+      <label for="e_passportPhoto">Photo of passport (optional)</label>
+      <div class="row2">
+        <input id="e_passportPhoto" type="file" accept="image/*" style="grid-column:1;">
+        <button type="button" id="e_passportPhotoUploadBtn" style="margin-top:0;">Upload photo</button>
+      </div>
+      <div class="status" id="e_passportPhotoStatusBox" style="margin-bottom:0;"></div>
+
       <label for="e_number">Number</label>
       <input id="e_number" type="tel">
 
@@ -474,11 +481,7 @@
       <input id="passport" placeholder="Optional">
 
       <label for="passportPhoto">Photo of passport (optional)</label>
-      <div class="row2">
-        <input id="passportPhoto" type="file" accept="image/*" style="grid-column:1;">
-        <button type="button" id="passportPhotoUploadBtn" style="margin-top:0;">Upload photo</button>
-      </div>
-      <div class="status" id="passportPhotoStatusBox" style="margin-bottom:0;"></div>
+      <input id="passportPhoto" type="file" accept="image/*">
 
       <label for="number">Number</label>
       <input id="number" type="tel" placeholder="e.g. 081 234 5678">
@@ -566,7 +569,7 @@
       <input id="deliveryFee" type="number" min="0" step="1" placeholder="Delivery fee amount (฿)" class="hidden" style="margin-top:8px;">
     </div>
 
-    <button type="submit" id="submitBtn">Add to sheet</button>
+    <button type="submit" id="submitBtn">Create contract</button>
     <div class="status" id="statusBox"></div>
   </form>
 
@@ -764,7 +767,7 @@ deliveryFeeAppliesCheckbox.addEventListener('change', refreshDeliveryFeeVisibili
 // row used earlier (Anton / Yamaha GT (Black 2)) so the auto-generated
 // contract document feature can be tried out without retyping every
 // field by hand. Never touches the sheet by itself -- still needs the
-// normal "Add to sheet" click to actually submit. ----
+// normal "Create contract" click to actually submit. ----
 document.getElementById('fillTestDataBtn').addEventListener('click', () => {
   document.getElementById('name').value = 'Anton';
   document.getElementById('nationality').value = 'Albania';
@@ -1148,6 +1151,63 @@ editViewPhotoBtn.addEventListener('click', async () => {
   }
 });
 
+// "Upload photo" on the edit modal -- same action:'uploadPassportPhoto'
+// used elsewhere, but here rowNumber is always known (this contract row
+// already exists), so the link is backfilled onto column T immediately
+// and the file is named/filed exactly like the Add-page flow: same
+// per-customer folder (matched by this record's name + phone), same
+// "Photo of Passport - <name> - <date>" naming, using this record's own
+// name/number/rentingDateFrom -- NOT whatever's currently typed in the
+// edit fields below, in case those haven't been saved yet -- so it always
+// lands in the one folder this contract's Doc/PDF already live in. ----
+const editPassportPhotoInput = document.getElementById('e_passportPhoto');
+const editPassportPhotoUploadBtn = document.getElementById('e_passportPhotoUploadBtn');
+const editPassportPhotoStatusBox = document.getElementById('e_passportPhotoStatusBox');
+editPassportPhotoUploadBtn.addEventListener('click', async () => {
+  if (!currentEditRecord) return;
+  const file = editPassportPhotoInput.files && editPassportPhotoInput.files[0];
+  if (!file) {
+    editPassportPhotoStatusBox.textContent = 'Choose a photo file first.';
+    editPassportPhotoStatusBox.className = 'status err';
+    return;
+  }
+
+  const originalText = editPassportPhotoUploadBtn.textContent;
+  editPassportPhotoUploadBtn.disabled = true;
+  editPassportPhotoUploadBtn.textContent = 'Uploading…';
+  editPassportPhotoStatusBox.className = 'status';
+  editPassportPhotoStatusBox.textContent = '';
+  try {
+    const base64 = await readFileAsBase64(file);
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'uploadPassportPhoto',
+        rowNumber: currentEditRecord.rowNumber,
+        name: currentEditRecord.name,
+        number: currentEditRecord.number,
+        rentingDateFrom: toIsoDateForInput(currentEditRecord.rentingDateFrom),
+        passportPhotoBase64: base64,
+        passportPhotoMimeType: file.type || 'image/jpeg'
+      })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+    currentEditRecord.passportPhotoUrl = data.url;
+    editPassportPhotoStatusBox.innerHTML = 'Photo uploaded. <a href="' + data.url +
+      '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open it</a>';
+    editPassportPhotoStatusBox.className = 'status ok';
+    editPassportPhotoInput.value = '';
+  } catch (err) {
+    editPassportPhotoStatusBox.textContent = 'Could not upload the photo: ' + err.message;
+    editPassportPhotoStatusBox.className = 'status err';
+  } finally {
+    editPassportPhotoUploadBtn.disabled = false;
+    editPassportPhotoUploadBtn.textContent = originalText;
+  }
+});
+
 const e_contact = document.getElementById('e_contact');
 const e_contactOther = document.getElementById('e_contactOther');
 e_contact.addEventListener('change', () => {
@@ -1203,6 +1263,9 @@ function openEditModal(r) {
   document.getElementById('e_name').value = r.name || '';
   document.getElementById('e_nationality').value = r.nationality || '';
   document.getElementById('e_passport').value = r.passport || '';
+  editPassportPhotoInput.value = '';
+  editPassportPhotoStatusBox.className = 'status';
+  editPassportPhotoStatusBox.textContent = '';
   document.getElementById('e_number').value = r.number || '';
 
   const contactOptions = ['WhatsApp', 'Messenger', 'Phone', 'Line'];
@@ -1324,68 +1387,7 @@ function readFileAsBase64(file) {
   });
 }
 
-// ---- Upload photo of passport -- its own standalone action, separate
-// from "Add to sheet", so it can be done as soon as the customer's name
-// (and ideally number/rental date) are typed in, without waiting for the
-// rest of the contract to be filled out or saved. Uses action:
-// 'uploadPassportPhoto' directly with whatever's currently in the Name /
-// Number / Renting from fields -- there's no contract row yet at this
-// point, so nothing gets backfilled; if a row is created later for this
-// same customer + date, the Search tab's edit modal finds this photo on
-// its own via action:'findPassportPhoto'. Saves into the same
-// per-customer subfolder the contract Doc/PDF will later use (matched by
-// name + phone), named to match ("Photo of Passport - <name> - <date>"). ----
 const passportPhotoInput = document.getElementById('passportPhoto');
-const passportPhotoUploadBtn = document.getElementById('passportPhotoUploadBtn');
-const passportPhotoStatusBox = document.getElementById('passportPhotoStatusBox');
-passportPhotoUploadBtn.addEventListener('click', async () => {
-  const file = passportPhotoInput.files && passportPhotoInput.files[0];
-  if (!file) {
-    passportPhotoStatusBox.textContent = 'Choose a photo file first.';
-    passportPhotoStatusBox.className = 'status err';
-    return;
-  }
-  const name = document.getElementById('name').value.trim();
-  if (!name) {
-    passportPhotoStatusBox.textContent = "Enter the customer's name above first, so the photo can be filed correctly.";
-    passportPhotoStatusBox.className = 'status err';
-    document.getElementById('name').focus();
-    return;
-  }
-
-  const originalText = passportPhotoUploadBtn.textContent;
-  passportPhotoUploadBtn.disabled = true;
-  passportPhotoUploadBtn.textContent = 'Uploading…';
-  passportPhotoStatusBox.className = 'status';
-  passportPhotoStatusBox.textContent = '';
-  try {
-    const base64 = await readFileAsBase64(file);
-    const res = await fetch(scriptUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action: 'uploadPassportPhoto',
-        name: name,
-        number: document.getElementById('number').value.trim(),
-        rentingDateFrom: document.getElementById('rentingDateFrom').value,
-        passportPhotoBase64: base64,
-        passportPhotoMimeType: file.type || 'image/jpeg'
-      })
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || 'Unknown error');
-    passportPhotoStatusBox.innerHTML = 'Photo uploaded. <a href="' + data.url +
-      '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open it</a>';
-    passportPhotoStatusBox.className = 'status ok';
-    passportPhotoInput.value = '';
-  } catch (err) {
-    passportPhotoStatusBox.textContent = 'Could not upload the photo: ' + err.message;
-    passportPhotoStatusBox.className = 'status err';
-  } finally {
-    passportPhotoUploadBtn.disabled = false;
-    passportPhotoUploadBtn.textContent = originalText;
-  }
-});
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -1399,7 +1401,7 @@ form.addEventListener('submit', async (e) => {
     statusBox.textContent = 'Please enter a total price before saving.';
     statusBox.className = 'status err';
     setAllButtonsDisabled(false);
-    submitBtn.textContent = 'Add to sheet';
+    submitBtn.textContent = 'Create contract';
     document.getElementById('totalPrice').focus();
     return;
   }
@@ -1408,7 +1410,7 @@ form.addEventListener('submit', async (e) => {
     statusBox.textContent = 'Please enter a deposit amount, or switch the deposit to Passport.';
     statusBox.className = 'status err';
     setAllButtonsDisabled(false);
-    submitBtn.textContent = 'Add to sheet';
+    submitBtn.textContent = 'Create contract';
     depositAmount.focus();
     return;
   }
@@ -1417,7 +1419,7 @@ form.addEventListener('submit', async (e) => {
     statusBox.textContent = 'Please enter a delivery fee amount, or untick "Delivery fee applies".';
     statusBox.className = 'status err';
     setAllButtonsDisabled(false);
-    submitBtn.textContent = 'Add to sheet';
+    submitBtn.textContent = 'Create contract';
     deliveryFeeInput.focus();
     return;
   }
@@ -1444,6 +1446,26 @@ form.addEventListener('submit', async (e) => {
     deliveryFee: deliveryFeeAppliesCheckbox.checked ? deliveryFeeInput.value : ''
   };
 
+  // Bundle the chosen passport photo (if any) straight into the same
+  // addContract request. The customer's Drive folder is created/found
+  // exactly once, at this point, using this same submission's name/
+  // number/rentingDateFrom -- so the photo always lands in the same
+  // folder the contract Doc/PDF are saved into, with no separate/earlier
+  // upload step that could create a mismatched folder.
+  const passportPhotoFile = passportPhotoInput.files && passportPhotoInput.files[0];
+  if (passportPhotoFile) {
+    try {
+      payload.passportPhotoBase64 = await readFileAsBase64(passportPhotoFile);
+      payload.passportPhotoMimeType = passportPhotoFile.type || 'image/jpeg';
+    } catch (err) {
+      statusBox.textContent = 'Could not read the passport photo file: ' + err.message;
+      statusBox.className = 'status err';
+      setAllButtonsDisabled(false);
+      submitBtn.textContent = 'Create contract';
+      return;
+    }
+  }
+
   startSaveProgress();
   try {
     const res = await fetch(scriptUrl, {
@@ -1458,14 +1480,17 @@ form.addEventListener('submit', async (e) => {
         ? ' <a href="' + data.contractPdfUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open contract PDF</a>' +
           (data.contractDocUrl ? ' · <a href="' + data.contractDocUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open Doc</a>' : '')
         : (data.contractDocWarning ? ' (' + data.contractDocWarning + ')' : '');
+      const photoLinkHtml = data.passportPhotoUrl
+        ? ' · <a href="' + data.passportPhotoUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open photo of passport</a>'
+        : '';
       if (data.warning) {
-        statusBox.innerHTML = 'Added — "' + payload.name + '" saved, but: ' + data.warning + docLinkHtml;
+        statusBox.innerHTML = 'Added — "' + payload.name + '" saved, but: ' + data.warning + docLinkHtml + photoLinkHtml;
         statusBox.className = 'status warn';
       } else {
         const checksNote = data.checksTotal
           ? ' ✓ Verified: ' + data.checksPassed + '/' + data.checksTotal + ' write-back checks passed.'
           : '';
-        statusBox.innerHTML = 'Added — "' + payload.name + '" saved to the Contract sheet.' + checksNote + docLinkHtml;
+        statusBox.innerHTML = 'Added — "' + payload.name + '" saved to the Contract sheet.' + checksNote + docLinkHtml + photoLinkHtml;
         statusBox.className = data.contractPdfUrl ? 'status ok' : (data.contractDocWarning ? 'status warn' : 'status ok');
       }
       sessionCount++;
@@ -1475,8 +1500,6 @@ form.addEventListener('submit', async (e) => {
       contactOther.required = false;
       refreshDepositAmountVisibility();
       refreshDeliveryFeeVisibility();
-      passportPhotoStatusBox.className = 'status';
-      passportPhotoStatusBox.textContent = '';
       setDefaultsToNow();
       sheetRows = null;
       rowsPromise = null;
@@ -1489,7 +1512,7 @@ form.addEventListener('submit', async (e) => {
     statusBox.className = 'status err';
   } finally {
     setAllButtonsDisabled(false);
-    submitBtn.textContent = 'Add to sheet';
+    submitBtn.textContent = 'Create contract';
   }
 });
 

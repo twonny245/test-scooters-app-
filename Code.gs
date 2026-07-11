@@ -549,6 +549,25 @@ function addContractEntry(data) {
       responsePayload.contractDocWarning = 'Contract row saved, but the contract document could not be generated: ' + docResult.error;
     }
 
+    // If a photo of passport was chosen on the Add form, save it into this
+    // same customer's Drive folder now, in the same request that creates
+    // the contract row -- NOT as a separate earlier upload step. This
+    // guarantees the folder that gets created/found (by
+    // getOrCreateCustomerContractFolder, keyed on name + phone) is exactly
+    // the one the contract Doc/PDF above just went into, since it's driven
+    // by this same data. Never allowed to block/fail the contract row
+    // write itself -- a photo problem only adds a warning.
+    if (data.passportPhotoBase64) {
+      data.rowNumber = newRow;
+      var photoResult = savePassportPhoto(data);
+      if (photoResult.success) {
+        responsePayload.passportPhotoUrl = photoResult.url;
+      } else {
+        var photoWarning = 'Photo of passport could not be saved: ' + photoResult.error;
+        responsePayload.warning = responsePayload.warning ? (responsePayload.warning + ' ' + photoWarning) : photoWarning;
+      }
+    }
+
     return ContentService
       .createTextOutput(JSON.stringify(responsePayload))
       .setMimeType(ContentService.MimeType.JSON);
@@ -1035,12 +1054,13 @@ function savePassportPhoto(data) {
   }
 }
 
-// ---- action:'uploadPassportPhoto' -- Contract page, standalone upload
-// (the Search tab's edit modal, for attaching/replacing a photo of the
-// passport on a contract that already exists, separately from
-// editContract's sheet-only field edits). data: same shape
-// savePassportPhoto expects, plus rowNumber so the link gets backfilled
-// onto that exact row. ----
+// ---- action:'uploadPassportPhoto' -- not currently called from any page
+// (the Add-contract form now bundles the photo into addContract instead,
+// so it's saved atomically with the folder/contract; see addContractEntry
+// above). Left in place as a standalone entry point in case a future page
+// needs to attach/replace a photo on an existing contract row without a
+// full editContract call. data: same shape savePassportPhoto expects,
+// plus rowNumber so the link gets backfilled onto that exact row. ----
 function uploadPassportPhotoEntry(data) {
   var result = savePassportPhoto(data);
   return ContentService
