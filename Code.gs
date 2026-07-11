@@ -231,6 +231,9 @@ function doPost(e) {
     if (data.action === 'uploadPassportPhoto') {
       return uploadPassportPhotoEntry(data);
     }
+    if (data.action === 'findPassportPhoto') {
+      return findPassportPhotoEntry(data);
+    }
 
     // ---- Customer-intake behavior ----
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -544,23 +547,6 @@ function addContractEntry(data) {
       }
     } else {
       responsePayload.contractDocWarning = 'Contract row saved, but the contract document could not be generated: ' + docResult.error;
-    }
-
-    // If a photo of the passport was attached on the Add form, save it
-    // into the SAME per-customer subfolder as the contract Doc/PDF, named
-    // to match ("Photo of Passport - <name> - <date>" instead of
-    // "Contract - <name> - <date>"). Never allowed to block/fail the
-    // contract row write -- any problem here is just a warning alongside
-    // an otherwise-successful save.
-    if (data.passportPhotoBase64) {
-      data.rowNumber = newRow;
-      var photoResult = savePassportPhoto(data);
-      if (photoResult.success) {
-        responsePayload.passportPhotoUrl = photoResult.url;
-      } else {
-        var photoWarn = 'Photo of passport: ' + photoResult.error;
-        responsePayload.warning = responsePayload.warning ? (responsePayload.warning + ' ' + photoWarn) : photoWarn;
-      }
     }
 
     return ContentService
@@ -1136,6 +1122,79 @@ function findContractDocumentEntry(data) {
 
     return ContentService
       .createTextOutput(JSON.stringify({ success: true, docUrl: docUrl, pdfUrl: pdfUrl }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- action:'findPassportPhoto' -- the "View Photo of Passport"
+// button's fallback for a row that has no passportPhotoUrl stored on it
+// yet. This comes up more often than the equivalent contract-document
+// fallback, because a photo of the passport can now be uploaded from the
+// Add-new-contract page BEFORE the contract row even exists (there's no
+// row yet to backfill a link onto at upload time) -- so the very first
+// time anyone looks at that contract's row afterwards, this is what
+// finds it.
+//
+// Reconstructs where the file should be the same way
+// findContractDocumentEntry does -- the customer's subfolder (matched by
+// name + phone, read-only, never creates one) and a file name STARTING
+// WITH "Photo of Passport - <name> - <rental start date>" (a prefix
+// match rather than exact, since the image's original extension --
+// .jpg/.png/etc -- isn't known in advance). If found, the link is
+// backfilled onto the Contract row (column T) so future clicks use the
+// fast stored-link path instead of searching Drive again. ----
+function findPassportPhotoEntry(data) {
+  try {
+    var name = (data.name || '').toString().trim();
+    var phone = (data.number || '').toString().trim();
+    if (!name) throw new Error('No customer name given to search by.');
+
+    var parentFolder = getOrCreateContractsFolder();
+    var matchedFolder = findCustomerContractFolder(parentFolder, name, phone);
+    if (!matchedFolder) {
+      throw new Error('Could not find a Drive folder for "' + name + '"' +
+        (phone ? ' (' + phone + ')' : '') + ' under "AA Scooters Contracts".');
+    }
+
+    var dateStr = data.rentingDateFrom ? formatIsoDateToDMY(data.rentingDateFrom).replace(/\//g, '-') : '';
+    var expectedPrefix = 'Photo of Passport - ' + name + ' - ' + dateStr;
+
+    var url = '';
+    var files = matchedFolder.getFiles();
+    while (files.hasNext()) {
+      var f = files.next();
+      if (f.getName().indexOf(expectedPrefix) === 0) {
+        url = f.getUrl();
+        break;
+      }
+    }
+
+    if (!url) {
+      throw new Error('Found "' + name + '"\'s folder, but no photo of the passport dated ' + dateStr +
+        ' was inside it -- it may not have been uploaded yet, or was renamed/moved.');
+    }
+
+    if (data.rowNumber) {
+      try {
+        var ss = SpreadsheetApp.getActiveSpreadsheet();
+        var sheet = ss.getSheetByName('Contract');
+        if (sheet) {
+          var rowNum = Math.round(Number(data.rowNumber));
+          if (rowNum && rowNum >= (HEADER_ROWS + 1) && rowNum <= sheet.getLastRow()) {
+            sheet.getRange(rowNum, 20).setValue(url);
+          }
+        }
+      } catch (backfillErr) {
+        Logger.log('Could not backfill photo-of-passport link: ' + backfillErr.message);
+      }
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, url: url }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService

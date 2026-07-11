@@ -338,12 +338,6 @@
       <button type="button" id="editViewPhotoBtn">View Photo of Passport</button>
     </div>
     <div class="results-empty" id="editNoDocsMsg" style="display:none; padding:0 0 14px; text-align:left;">No contract document was generated/saved for this record.</div>
-    <label for="e_passportPhotoUpload">Upload / replace photo of passport</label>
-    <div class="row2">
-      <input id="e_passportPhotoUpload" type="file" accept="image/*" style="grid-column:1;">
-      <button type="button" id="e_passportPhotoUploadBtn" style="margin-top:0;">Upload photo</button>
-    </div>
-    <div class="status" id="e_photoStatusBox" style="margin-bottom:14px;"></div>
     <form id="editForm">
       <label for="e_name">Name</label>
       <input id="e_name">
@@ -480,7 +474,11 @@
       <input id="passport" placeholder="Optional">
 
       <label for="passportPhoto">Photo of passport (optional)</label>
-      <input id="passportPhoto" type="file" accept="image/*">
+      <div class="row2">
+        <input id="passportPhoto" type="file" accept="image/*" style="grid-column:1;">
+        <button type="button" id="passportPhotoUploadBtn" style="margin-top:0;">Upload photo</button>
+      </div>
+      <div class="status" id="passportPhotoStatusBox" style="margin-bottom:0;"></div>
 
       <label for="number">Number</label>
       <input id="number" type="tel" placeholder="e.g. 081 234 5678">
@@ -1104,70 +1102,49 @@ async function viewContractDocument(kind) {
 editViewPdfBtn.addEventListener('click', () => viewContractDocument('pdf'));
 editViewDocBtn.addEventListener('click', () => viewContractDocument('doc'));
 
-// "View Photo of Passport" -- a photo of the passport is only ever
-// attached by an explicit upload (never auto-generated), so there's no
-// Drive-search fallback here like the contract Doc/PDF buttons have -- if
-// passportPhotoUrl isn't on the record, none has been uploaded yet.
+// "View Photo of Passport" -- opens the stored link if this record has
+// one. If not (e.g. the photo was uploaded from the Add-new-contract page
+// BEFORE this contract row even existed, so there was nothing to backfill
+// a link onto at the time), falls back to action:'findPassportPhoto' on
+// the backend, which searches this customer's subfolder (by name +
+// phone) for a file dated to this record's rental start date -- same
+// reconstruction approach as viewContractDocument's Doc/PDF fallback.
 const editViewPhotoBtn = document.getElementById('editViewPhotoBtn');
-editViewPhotoBtn.addEventListener('click', () => {
-  if (currentEditRecord && currentEditRecord.passportPhotoUrl) {
-    window.open(currentEditRecord.passportPhotoUrl, '_blank', 'noopener');
-  } else {
-    editStatusBox.textContent = 'No photo of the passport has been uploaded for this record yet.';
-    editStatusBox.className = 'status warn';
-  }
-});
-
-// ---- Upload / replace photo of passport (edit modal) -- a standalone
-// action:'uploadPassportPhoto' request, separate from editForm's Save
-// changes button, so attaching a photo doesn't require touching any of
-// the other Contract-sheet fields. Saves into the same per-customer
-// subfolder as the contract Doc/PDF (see savePassportPhoto on the
-// backend), named to match. ----
-const e_passportPhotoUpload = document.getElementById('e_passportPhotoUpload');
-const e_passportPhotoUploadBtn = document.getElementById('e_passportPhotoUploadBtn');
-const e_photoStatusBox = document.getElementById('e_photoStatusBox');
-e_passportPhotoUploadBtn.addEventListener('click', async () => {
+editViewPhotoBtn.addEventListener('click', async () => {
   if (!currentEditRecord) return;
-  const file = e_passportPhotoUpload.files && e_passportPhotoUpload.files[0];
-  if (!file) {
-    e_photoStatusBox.textContent = 'Choose a photo file first.';
-    e_photoStatusBox.className = 'status err';
+
+  if (currentEditRecord.passportPhotoUrl) {
+    window.open(currentEditRecord.passportPhotoUrl, '_blank', 'noopener');
     return;
   }
 
-  const originalText = e_passportPhotoUploadBtn.textContent;
-  e_passportPhotoUploadBtn.disabled = true;
-  e_passportPhotoUploadBtn.textContent = 'Uploading…';
-  e_photoStatusBox.className = 'status';
-  e_photoStatusBox.textContent = '';
+  const originalText = editViewPhotoBtn.textContent;
+  editViewPhotoBtn.disabled = true;
+  editViewPhotoBtn.textContent = 'Searching…';
+  editStatusBox.className = 'status';
+  editStatusBox.textContent = '';
   try {
-    const base64 = await readFileAsBase64(file);
     const res = await fetch(scriptUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
-        action: 'uploadPassportPhoto',
+        action: 'findPassportPhoto',
         rowNumber: currentEditRecord.rowNumber,
         name: currentEditRecord.name,
         number: currentEditRecord.number,
-        rentingDateFrom: toIsoDateForInput(currentEditRecord.rentingDateFrom),
-        passportPhotoBase64: base64,
-        passportPhotoMimeType: file.type || 'image/jpeg'
+        rentingDateFrom: toIsoDateForInput(currentEditRecord.rentingDateFrom)
       })
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Unknown error');
     currentEditRecord.passportPhotoUrl = data.url;
-    e_photoStatusBox.textContent = 'Photo uploaded.';
-    e_photoStatusBox.className = 'status ok';
-    e_passportPhotoUpload.value = '';
+    window.open(data.url, '_blank', 'noopener');
   } catch (err) {
-    e_photoStatusBox.textContent = 'Could not upload the photo: ' + err.message;
-    e_photoStatusBox.className = 'status err';
+    editStatusBox.textContent = 'Could not find a photo of the passport: ' + err.message;
+    editStatusBox.className = 'status err';
   } finally {
-    e_passportPhotoUploadBtn.disabled = false;
-    e_passportPhotoUploadBtn.textContent = originalText;
+    editViewPhotoBtn.disabled = false;
+    editViewPhotoBtn.textContent = originalText;
   }
 });
 
@@ -1222,12 +1199,6 @@ function openEditModal(r) {
   editViewPdfBtn.disabled = false;
   editViewDocBtn.disabled = false;
   editNoDocsMsg.style.display = 'none';
-
-  // Reset the photo upload control's leftover state from whatever record
-  // was open before this one.
-  e_passportPhotoUpload.value = '';
-  e_photoStatusBox.className = 'status';
-  e_photoStatusBox.textContent = '';
 
   document.getElementById('e_name').value = r.name || '';
   document.getElementById('e_nationality').value = r.nationality || '';
@@ -1353,6 +1324,69 @@ function readFileAsBase64(file) {
   });
 }
 
+// ---- Upload photo of passport -- its own standalone action, separate
+// from "Add to sheet", so it can be done as soon as the customer's name
+// (and ideally number/rental date) are typed in, without waiting for the
+// rest of the contract to be filled out or saved. Uses action:
+// 'uploadPassportPhoto' directly with whatever's currently in the Name /
+// Number / Renting from fields -- there's no contract row yet at this
+// point, so nothing gets backfilled; if a row is created later for this
+// same customer + date, the Search tab's edit modal finds this photo on
+// its own via action:'findPassportPhoto'. Saves into the same
+// per-customer subfolder the contract Doc/PDF will later use (matched by
+// name + phone), named to match ("Photo of Passport - <name> - <date>"). ----
+const passportPhotoInput = document.getElementById('passportPhoto');
+const passportPhotoUploadBtn = document.getElementById('passportPhotoUploadBtn');
+const passportPhotoStatusBox = document.getElementById('passportPhotoStatusBox');
+passportPhotoUploadBtn.addEventListener('click', async () => {
+  const file = passportPhotoInput.files && passportPhotoInput.files[0];
+  if (!file) {
+    passportPhotoStatusBox.textContent = 'Choose a photo file first.';
+    passportPhotoStatusBox.className = 'status err';
+    return;
+  }
+  const name = document.getElementById('name').value.trim();
+  if (!name) {
+    passportPhotoStatusBox.textContent = "Enter the customer's name above first, so the photo can be filed correctly.";
+    passportPhotoStatusBox.className = 'status err';
+    document.getElementById('name').focus();
+    return;
+  }
+
+  const originalText = passportPhotoUploadBtn.textContent;
+  passportPhotoUploadBtn.disabled = true;
+  passportPhotoUploadBtn.textContent = 'Uploading…';
+  passportPhotoStatusBox.className = 'status';
+  passportPhotoStatusBox.textContent = '';
+  try {
+    const base64 = await readFileAsBase64(file);
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'uploadPassportPhoto',
+        name: name,
+        number: document.getElementById('number').value.trim(),
+        rentingDateFrom: document.getElementById('rentingDateFrom').value,
+        passportPhotoBase64: base64,
+        passportPhotoMimeType: file.type || 'image/jpeg'
+      })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+    passportPhotoStatusBox.innerHTML = 'Photo uploaded. <a href="' + data.url +
+      '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open it</a>';
+    passportPhotoStatusBox.className = 'status ok';
+    passportPhotoInput.value = '';
+  } catch (err) {
+    passportPhotoStatusBox.textContent = 'Could not upload the photo: ' + err.message;
+    passportPhotoStatusBox.className = 'status err';
+  } finally {
+    passportPhotoUploadBtn.disabled = false;
+    passportPhotoUploadBtn.textContent = originalText;
+  }
+});
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   statusBox.className = 'status';
@@ -1390,23 +1424,6 @@ form.addEventListener('submit', async (e) => {
 
   const baseContact = contactSelect.value === 'other' ? contactOther.value.trim() : contactSelect.value;
 
-  const passportPhotoInput = document.getElementById('passportPhoto');
-  const passportPhotoFile = passportPhotoInput.files && passportPhotoInput.files[0];
-  let passportPhotoBase64 = '';
-  let passportPhotoMimeType = '';
-  if (passportPhotoFile) {
-    try {
-      passportPhotoBase64 = await readFileAsBase64(passportPhotoFile);
-      passportPhotoMimeType = passportPhotoFile.type || 'image/jpeg';
-    } catch (fileErr) {
-      statusBox.textContent = 'Could not read the photo of passport file: ' + fileErr.message;
-      statusBox.className = 'status err';
-      setAllButtonsDisabled(false);
-      submitBtn.textContent = 'Add to sheet';
-      return;
-    }
-  }
-
   const payload = {
     action: 'addContract',
     name: document.getElementById('name').value.trim(),
@@ -1424,9 +1441,7 @@ form.addEventListener('submit', async (e) => {
     deposit: depositSelect.value,
     depositAmount: depositNeedsAmount() ? depositAmount.value : '',
     deliveryFeeApplies: deliveryFeeAppliesCheckbox.checked,
-    deliveryFee: deliveryFeeAppliesCheckbox.checked ? deliveryFeeInput.value : '',
-    passportPhotoBase64: passportPhotoBase64,
-    passportPhotoMimeType: passportPhotoMimeType
+    deliveryFee: deliveryFeeAppliesCheckbox.checked ? deliveryFeeInput.value : ''
   };
 
   startSaveProgress();
@@ -1443,17 +1458,14 @@ form.addEventListener('submit', async (e) => {
         ? ' <a href="' + data.contractPdfUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open contract PDF</a>' +
           (data.contractDocUrl ? ' · <a href="' + data.contractDocUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open Doc</a>' : '')
         : (data.contractDocWarning ? ' (' + data.contractDocWarning + ')' : '');
-      const photoLinkHtml = data.passportPhotoUrl
-        ? ' · <a href="' + data.passportPhotoUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open photo of passport</a>'
-        : '';
       if (data.warning) {
-        statusBox.innerHTML = 'Added — "' + payload.name + '" saved, but: ' + data.warning + docLinkHtml + photoLinkHtml;
+        statusBox.innerHTML = 'Added — "' + payload.name + '" saved, but: ' + data.warning + docLinkHtml;
         statusBox.className = 'status warn';
       } else {
         const checksNote = data.checksTotal
           ? ' ✓ Verified: ' + data.checksPassed + '/' + data.checksTotal + ' write-back checks passed.'
           : '';
-        statusBox.innerHTML = 'Added — "' + payload.name + '" saved to the Contract sheet.' + checksNote + docLinkHtml + photoLinkHtml;
+        statusBox.innerHTML = 'Added — "' + payload.name + '" saved to the Contract sheet.' + checksNote + docLinkHtml;
         statusBox.className = data.contractPdfUrl ? 'status ok' : (data.contractDocWarning ? 'status warn' : 'status ok');
       }
       sessionCount++;
@@ -1463,6 +1475,8 @@ form.addEventListener('submit', async (e) => {
       contactOther.required = false;
       refreshDepositAmountVisibility();
       refreshDeliveryFeeVisibility();
+      passportPhotoStatusBox.className = 'status';
+      passportPhotoStatusBox.textContent = '';
       setDefaultsToNow();
       sheetRows = null;
       rowsPromise = null;
