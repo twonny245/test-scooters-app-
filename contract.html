@@ -291,7 +291,6 @@
   <h1>Contract</h1>
   <div class="sub">Adds a row straight into the "Contract" tab</div>
   <div class="head-btn-row">
-    <button type="button" id="fillTestDataBtn">Fill test data (Anton)</button>
     <button type="button" id="pendingContractsBtn">Pending contracts</button>
   </div>
 </div>
@@ -332,10 +331,14 @@
       <h2>Edit contract</h2>
       <button type="button" class="modal-close" id="editCloseBtn">&times;</button>
     </div>
-    <div class="head-btn-row" id="editViewDocsRow" style="margin-bottom:14px;">
-      <button type="button" id="editViewPdfBtn">View Contract PDF</button>
-      <button type="button" id="editViewDocBtn">View Contract Google Doc</button>
+    <div class="head-btn-row" id="editViewDocsRow" style="margin-bottom:8px;">
+      <button type="button" id="editViewPdfBtn">View Contract</button>
+      <button type="button" id="editUpdateContractBtn">Update Contract</button>
       <button type="button" id="editViewPhotoBtn">View Photo of Passport</button>
+    </div>
+    <div class="head-btn-row" style="margin-bottom:14px;">
+      <button type="button" id="editViewReceiptBtn">View Receipt</button>
+      <button type="button" id="editReceiptBtn">Edit Receipt</button>
     </div>
     <div class="results-empty" id="editNoDocsMsg" style="display:none; padding:0 0 14px; text-align:left;">No contract document was generated/saved for this record.</div>
     <form id="editForm">
@@ -442,6 +445,103 @@
       <button type="submit" id="editSubmitBtn">Save changes</button>
       <div class="status" id="editStatusBox"></div>
     </form>
+  </div>
+</div>
+
+<!-- Edit Receipt modal -- opened from the edit modal's "Edit Receipt"
+     button. A receipt is now always auto-generated the moment a contract
+     is created, so this is always an EDIT of the existing one, never a
+     from-scratch first print. Every field is prefilled straight from the
+     contract's own current data (never from whatever was on the last
+     generated receipt) -- e.g. for an extension, staff change the dates
+     and fee by hand here. Two views inside the same card: #receiptFormView
+     (every field, editable) and #receiptConfirmView (a synopsis +
+     Confirm/Back, shown after the form is submitted). Confirming replaces
+     the existing receipt PDF for this contract -- see
+     generateReceiptDocument in Code.gs. -->
+<div class="modal-backdrop" id="receiptBackdrop">
+  <div class="modal-card" id="receiptCard">
+    <div class="modal-head">
+      <h2>Edit Receipt</h2>
+      <button type="button" class="modal-close" id="receiptCloseBtn">&times;</button>
+    </div>
+
+    <div id="receiptFormView">
+      <form id="receiptForm">
+        <label for="r_receiptDate">Date</label>
+        <input id="r_receiptDate" type="date" required>
+
+        <label for="r_name">Name</label>
+        <input id="r_name" required>
+
+        <label for="r_bikeModel">Scooter type</label>
+        <input id="r_bikeModel">
+
+        <label for="r_cc">Engine size (CC)</label>
+        <input id="r_cc" placeholder="e.g. 125cc">
+
+        <div class="row2">
+          <div>
+            <label for="r_periodFrom">Rental period from</label>
+            <input id="r_periodFrom" type="date">
+          </div>
+          <div>
+            <label for="r_periodTo">Rental period to</label>
+            <input id="r_periodTo" type="date">
+          </div>
+        </div>
+
+        <div class="row2">
+          <div>
+            <label for="r_rentalFee">Rental fee (฿)</label>
+            <input id="r_rentalFee" type="number" min="0" step="1">
+          </div>
+          <div>
+            <label for="r_deliveryFee">Delivery fee (฿)</label>
+            <input id="r_deliveryFee" type="number" min="0" step="1">
+          </div>
+        </div>
+
+        <div class="row2">
+          <div>
+            <label for="r_otherLabel">Other charge -- description</label>
+            <input id="r_otherLabel" placeholder="e.g. Damage fee">
+          </div>
+          <div>
+            <label for="r_otherAmount">Other charge -- amount (฿)</label>
+            <input id="r_otherAmount" type="number" min="0" step="1">
+          </div>
+        </div>
+
+        <label for="r_totalPaid">Total amount paid (฿)</label>
+        <input id="r_totalPaid" type="number" min="0" step="1" required>
+
+        <label for="r_paymentMethod">Payment method</label>
+        <select id="r_paymentMethod">
+          <option value="cash">Cash</option>
+          <option value="scan">Thai QR Scan</option>
+          <option value="wise">Wise</option>
+          <option value="revolut">Revolut</option>
+          <option value="other">Other</option>
+        </select>
+        <input id="r_otherMethodText" placeholder="Describe the payment method" class="hidden" style="margin-top:8px;">
+
+        <label for="r_receivedBy">Received by</label>
+        <input id="r_receivedBy">
+
+        <button type="submit" id="receiptSubmitBtn">Review changes</button>
+        <div class="status" id="receiptFormStatusBox"></div>
+      </form>
+    </div>
+
+    <div id="receiptConfirmView" style="display:none;">
+      <div id="receiptSynopsisBox" style="font-size:13.5px; line-height:1.7;"></div>
+      <div class="confirm-actions">
+        <button type="button" class="confirm-rent-btn" id="receiptConfirmBtn">Confirm &amp; Regenerate</button>
+        <button type="button" class="confirm-back-btn" id="receiptBackBtn">Back to edit</button>
+      </div>
+      <div class="status" id="receiptConfirmStatusBox"></div>
+    </div>
   </div>
 </div>
 
@@ -763,32 +863,6 @@ function refreshDeliveryFeeVisibility() {
 }
 deliveryFeeAppliesCheckbox.addEventListener('change', refreshDeliveryFeeVisibility);
 
-// ---- Testing helper only -- prefills the Add form with the same test
-// row used earlier (Anton / Yamaha GT (Black 2)) so the auto-generated
-// contract document feature can be tried out without retyping every
-// field by hand. Never touches the sheet by itself -- still needs the
-// normal "Create contract" click to actually submit. ----
-document.getElementById('fillTestDataBtn').addEventListener('click', () => {
-  document.getElementById('name').value = 'Anton';
-  document.getElementById('nationality').value = 'Albania';
-  document.getElementById('passport').value = 'lk961971';
-  document.getElementById('number').value = '8989877';
-  contactSelect.value = 'WhatsApp';
-  document.getElementById('bikeModel').value = 'Yamaha GT (Black 2)';
-  document.getElementById('rentingDateFrom').value = '2026-07-09';
-  document.getElementById('returnDate').value = '2026-07-22';
-  document.getElementById('returnTime').value = '18:25';
-  document.getElementById('deliverToHotel').value = 'Yes';
-  document.getElementById('totalPrice').value = '3000';
-  document.getElementById('paidBy').value = 'scan';
-  depositSelect.value = 'Scan';
-  refreshDepositAmountVisibility();
-  depositAmount.value = '2000';
-  deliveryFeeAppliesCheckbox.checked = true;
-  refreshDeliveryFeeVisibility();
-  deliveryFeeInput.value = '200';
-});
-
 /* ---------------- Pending contracts picker (Rent / Cancel) ---------------- */
 
 const pendingBtn = document.getElementById('pendingContractsBtn');
@@ -1034,35 +1108,89 @@ editBackdrop.addEventListener('click', (e) => {
 });
 editCloseBtn.addEventListener('click', closeEditModal);
 
-// "View Contract PDF" / "View Contract Google Doc" -- opens whichever
-// link was stored on this row back when the contract document was first
-// generated (contractDocUrl/contractPdfUrl from getContractRows). If a
-// row has no stored link yet (e.g. it was generated before those columns
-// existed), this falls back to action:'findContractDocument' on the
-// backend, which searches Drive for this customer's subfolder (by name +
-// phone) and the contract file dated to this record's rental start date
-// -- same reconstruction logic generateContractDocument itself uses to
-// decide where a NEW contract goes. Whatever is found gets cached onto
-// the record (and backfilled onto the sheet row server-side) so the next
-// click is instant.
+// "View Contract" -- opens the PDF link stored on this row (contractPdfUrl
+// from getContractRows). If a row has no stored link yet (e.g. it's an old
+// contract from before this column existed), this falls back to
+// action:'findContractDocument' on the backend, which searches Drive for
+// this customer's subfolder (by name + phone) and the contract file dated
+// to this record's rental start date -- same reconstruction logic
+// generateContractDocument itself uses to decide where a NEW contract
+// goes. Whatever is found gets cached onto the record (and backfilled
+// onto the sheet row server-side) so the next click is instant. If
+// nothing at all can be found, offers to generate a fresh one (same
+// backend action, 'regenerateContract', that "Update Contract" uses).
+//
+// "Update Contract" -- always available, always confirmed: regenerates
+// the contract PDF from this row's own current fields and overrides
+// whatever PDF already existed for it.
 const editViewDocsRow = document.getElementById('editViewDocsRow');
 const editViewPdfBtn = document.getElementById('editViewPdfBtn');
-const editViewDocBtn = document.getElementById('editViewDocBtn');
+const editUpdateContractBtn = document.getElementById('editUpdateContractBtn');
 const editNoDocsMsg = document.getElementById('editNoDocsMsg');
 
-async function viewContractDocument(kind) {
-  if (!currentEditRecord) return;
-  const urlKey = kind === 'pdf' ? 'contractPdfUrl' : 'contractDocUrl';
-  const btn = kind === 'pdf' ? editViewPdfBtn : editViewDocBtn;
+// Contracts are PDF-only now (same as receipts -- the filled Google Doc is
+// only ever a temporary intermediate step on the backend, never kept).
+// Builds the payload regenerateContract needs from this row's own current
+// fields, exactly as loaded/shown on the Edit-contract form.
+function buildRegenerateContractPayload() {
+  const r = currentEditRecord;
+  return {
+    action: 'regenerateContract',
+    rowNumber: r.rowNumber,
+    name: r.name,
+    nationality: r.nationality,
+    passport: r.passport,
+    number: r.number,
+    bikeModel: r.bikeModel,
+    rentingDateFrom: toIsoDateForInput(r.rentingDateFrom),
+    returnDate: toIsoDateForInput(r.returnDate),
+    returnTime: r.returnTime,
+    deliverToHotel: r.deliverToHotel,
+    totalPrice: r.totalPrice,
+    paidBy: r.paidBy,
+    deposit: r.deposit,
+    depositAmount: r.depositAmount,
+    deliveryFeeApplies: !!(r.deliveryFee && r.deliveryFee.toString().toLowerCase() !== 'no'),
+    deliveryFee: r.deliveryFee
+  };
+}
 
-  if (currentEditRecord[urlKey]) {
-    window.open(currentEditRecord[urlKey], '_blank', 'noopener');
+// Shared regenerate call used by both "Update Contract" (deliberate,
+// always-confirmed override) and "View Contract"'s fallback offer when no
+// PDF can be found at all. Returns true/false; caller handles the button
+// state and confirm prompt, since those differ between the two callers.
+async function performContractRegeneration() {
+  editStatusBox.className = 'status';
+  editStatusBox.textContent = 'Generating…';
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(buildRegenerateContractPayload())
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+    currentEditRecord.contractPdfUrl = data.pdfUrl;
+    editStatusBox.textContent = 'Contract updated.';
+    editStatusBox.className = 'status ok';
+    return true;
+  } catch (err) {
+    editStatusBox.textContent = 'Could not update the contract: ' + err.message;
+    editStatusBox.className = 'status err';
+    return false;
+  }
+}
+
+async function viewContract() {
+  if (!currentEditRecord) return;
+  if (currentEditRecord.contractPdfUrl) {
+    window.open(currentEditRecord.contractPdfUrl, '_blank', 'noopener');
     return;
   }
 
-  const originalText = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Searching…';
+  const originalText = editViewPdfBtn.textContent;
+  editViewPdfBtn.disabled = true;
+  editViewPdfBtn.textContent = 'Searching…';
   editStatusBox.className = 'status';
   editStatusBox.textContent = '';
   try {
@@ -1079,31 +1207,49 @@ async function viewContractDocument(kind) {
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Unknown error');
-
-    // Cache whatever was found onto the current record, so the other
-    // button (or clicking this one again) doesn't need to search twice.
-    if (data.docUrl) currentEditRecord.contractDocUrl = data.docUrl;
     if (data.pdfUrl) currentEditRecord.contractPdfUrl = data.pdfUrl;
 
-    const foundUrl = currentEditRecord[urlKey];
-    if (foundUrl) {
-      window.open(foundUrl, '_blank', 'noopener');
-    } else {
-      editStatusBox.textContent = 'Found this customer\'s folder, but no ' +
-        (kind === 'pdf' ? 'PDF' : 'Google Doc') + ' was in it.';
-      editStatusBox.className = 'status warn';
+    if (currentEditRecord.contractPdfUrl) {
+      window.open(currentEditRecord.contractPdfUrl, '_blank', 'noopener');
+      editViewPdfBtn.disabled = false;
+      editViewPdfBtn.textContent = originalText;
+      return;
     }
   } catch (err) {
-    editStatusBox.textContent = 'Could not find the contract document: ' + err.message;
-    editStatusBox.className = 'status err';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = originalText;
+    // Falls through to the "generate one?" offer below -- whether the
+    // search threw (no folder/file found at all) or simply came back
+    // empty, the end result for the user is the same: no PDF to open.
+  }
+  editViewPdfBtn.disabled = false;
+  editViewPdfBtn.textContent = originalText;
+
+  const proceed = confirm('No contract document found for this customer. Would you like to generate one now?');
+  if (!proceed) return;
+  editViewPdfBtn.disabled = true;
+  editViewPdfBtn.textContent = 'Generating…';
+  const ok = await performContractRegeneration();
+  editViewPdfBtn.disabled = false;
+  editViewPdfBtn.textContent = originalText;
+  if (ok && currentEditRecord.contractPdfUrl) {
+    window.open(currentEditRecord.contractPdfUrl, '_blank', 'noopener');
   }
 }
 
-editViewPdfBtn.addEventListener('click', () => viewContractDocument('pdf'));
-editViewDocBtn.addEventListener('click', () => viewContractDocument('doc'));
+async function updateContract() {
+  if (!currentEditRecord) return;
+  const proceed = confirm('Are you sure you want to update the contract? This will override the existing one.');
+  if (!proceed) return;
+
+  const originalText = editUpdateContractBtn.textContent;
+  editUpdateContractBtn.disabled = true;
+  editUpdateContractBtn.textContent = 'Updating…';
+  await performContractRegeneration();
+  editUpdateContractBtn.disabled = false;
+  editUpdateContractBtn.textContent = originalText;
+}
+
+editViewPdfBtn.addEventListener('click', viewContract);
+editUpdateContractBtn.addEventListener('click', updateContract);
 
 // "View Photo of Passport" -- opens the stored link if this record has
 // one. If not (e.g. the photo was uploaded from the Add-new-contract page
@@ -1111,7 +1257,7 @@ editViewDocBtn.addEventListener('click', () => viewContractDocument('doc'));
 // a link onto at the time), falls back to action:'findPassportPhoto' on
 // the backend, which searches this customer's subfolder (by name +
 // phone) for a file dated to this record's rental start date -- same
-// reconstruction approach as viewContractDocument's Doc/PDF fallback.
+// reconstruction approach as viewContract's PDF fallback.
 const editViewPhotoBtn = document.getElementById('editViewPhotoBtn');
 editViewPhotoBtn.addEventListener('click', async () => {
   if (!currentEditRecord) return;
@@ -1151,15 +1297,19 @@ editViewPhotoBtn.addEventListener('click', async () => {
   }
 });
 
-// "Upload photo" on the edit modal -- same action:'uploadPassportPhoto'
-// used elsewhere, but here rowNumber is always known (this contract row
-// already exists), so the link is backfilled onto column T immediately
-// and the file is named/filed exactly like the Add-page flow: same
-// per-customer folder (matched by this record's name + phone), same
-// "Photo of Passport - <name> - <date>" naming, using this record's own
-// name/number/rentingDateFrom -- NOT whatever's currently typed in the
-// edit fields below, in case those haven't been saved yet -- so it always
-// lands in the one folder this contract's Doc/PDF already live in. ----
+// "Upload photo" on the edit modal -- action:'uploadPassportPhoto', with
+// rowNumber always known (this contract row already exists). The backend
+// now resolves the folder from this exact row's own stored Doc/PDF/photo
+// links rather than re-matching by name+phone, so it always lands in the
+// one folder this contract's Doc/PDF already live in -- never a new
+// folder, even if the phone number was typed with different spacing back
+// when the folder was first created. If this contract already has a
+// photo of passport on file, the backend refuses to save a second one
+// and reports back the existing link instead -- shown here as an
+// "already on file" message with a link to open it, rather than an
+// error. Uses this record's own name/number/rentingDateFrom, NOT
+// whatever's currently typed in the edit fields below, in case those
+// haven't been saved yet. ----
 const editPassportPhotoInput = document.getElementById('e_passportPhoto');
 const editPassportPhotoUploadBtn = document.getElementById('e_passportPhotoUploadBtn');
 const editPassportPhotoStatusBox = document.getElementById('e_passportPhotoStatusBox');
@@ -1193,6 +1343,14 @@ editPassportPhotoUploadBtn.addEventListener('click', async () => {
       })
     });
     const data = await res.json();
+    if (!data.success && data.alreadyExists) {
+      currentEditRecord.passportPhotoUrl = data.url;
+      editPassportPhotoStatusBox.innerHTML = (data.error || 'A photo of passport is already on file for this contract.') +
+        ' <a href="' + data.url + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open it</a>';
+      editPassportPhotoStatusBox.className = 'status warn';
+      editPassportPhotoInput.value = '';
+      return;
+    }
     if (!data.success) throw new Error(data.error || 'Unknown error');
     currentEditRecord.passportPhotoUrl = data.url;
     editPassportPhotoStatusBox.innerHTML = 'Photo uploaded. <a href="' + data.url +
@@ -1205,6 +1363,261 @@ editPassportPhotoUploadBtn.addEventListener('click', async () => {
   } finally {
     editPassportPhotoUploadBtn.disabled = false;
     editPassportPhotoUploadBtn.textContent = originalText;
+  }
+});
+
+/* ---------------- Edit Receipt ---------------- */
+// action:'generateReceipt' -- opened from the edit modal's "Edit
+// Receipt" button. A receipt is now generated automatically the moment
+// a contract is created (see the Add-form's submit handler / Code.gs's
+// addContractEntry), so this is always editing/regenerating the existing
+// one, never a first-time print. Every field is prefilled fresh from the
+// contract currently being edited (currentEditRecord) each time this
+// opens -- never from whatever was submitted last time -- so an
+// extension, for example, means manually bumping the dates/fee here.
+// Nothing touches the Contract sheet itself. Two views inside one modal
+// card: the form, then (after it's submitted) a synopsis with
+// Confirm/Back, so nothing is regenerated until the details are
+// confirmed -- confirming replaces the one existing receipt PDF for this
+// contract.
+const receiptBackdrop = document.getElementById('receiptBackdrop');
+const receiptCloseBtn = document.getElementById('receiptCloseBtn');
+const editReceiptBtn = document.getElementById('editReceiptBtn');
+const editViewReceiptBtn = document.getElementById('editViewReceiptBtn');
+const receiptForm = document.getElementById('receiptForm');
+const receiptSubmitBtn = document.getElementById('receiptSubmitBtn');
+const receiptFormStatusBox = document.getElementById('receiptFormStatusBox');
+const receiptFormView = document.getElementById('receiptFormView');
+const receiptConfirmView = document.getElementById('receiptConfirmView');
+const receiptSynopsisBox = document.getElementById('receiptSynopsisBox');
+const receiptConfirmBtn = document.getElementById('receiptConfirmBtn');
+const receiptBackBtn = document.getElementById('receiptBackBtn');
+const receiptConfirmStatusBox = document.getElementById('receiptConfirmStatusBox');
+const r_paymentMethod = document.getElementById('r_paymentMethod');
+const r_otherMethodText = document.getElementById('r_otherMethodText');
+
+function closeReceiptModal() {
+  receiptBackdrop.classList.remove('show');
+}
+let receiptMouseDownOnBackdrop = false;
+receiptBackdrop.addEventListener('mousedown', (e) => {
+  receiptMouseDownOnBackdrop = (e.target === receiptBackdrop);
+});
+receiptBackdrop.addEventListener('click', (e) => {
+  if (e.target === receiptBackdrop && receiptMouseDownOnBackdrop) closeReceiptModal();
+  receiptMouseDownOnBackdrop = false;
+});
+receiptCloseBtn.addEventListener('click', closeReceiptModal);
+
+r_paymentMethod.addEventListener('change', () => {
+  if (r_paymentMethod.value === 'other') {
+    r_otherMethodText.classList.remove('hidden');
+  } else {
+    r_otherMethodText.classList.add('hidden');
+    r_otherMethodText.value = '';
+  }
+});
+
+// Maps the contract's own "Paid by" field (cash/scan/wise/revolut, or
+// occasionally older free text) onto the receipt's payment-method
+// picker -- an unrecognized value becomes "Other" with the original text
+// carried into the "describe it" field, rather than silently discarded.
+function mapPaidByToMethod(paidBy) {
+  const known = ['cash', 'scan', 'wise', 'revolut'];
+  const lower = (paidBy || '').toString().trim().toLowerCase();
+  if (known.includes(lower)) return { method: lower, otherText: '' };
+  if (lower) return { method: 'other', otherText: paidBy };
+  return { method: 'cash', otherText: '' };
+}
+
+editViewReceiptBtn.addEventListener('click', () => {
+  if (!currentEditRecord) return;
+  if (currentEditRecord.receiptPdfUrl) {
+    window.open(currentEditRecord.receiptPdfUrl, '_blank', 'noopener');
+    return;
+  }
+  const proceed = confirm('No receipt exists for this contract yet. Would you like to generate one?');
+  if (!proceed) return;
+  openEditReceiptForm();
+});
+
+editReceiptBtn.addEventListener('click', () => {
+  if (!currentEditRecord) return;
+  if (!currentEditRecord.receiptPdfUrl) {
+    const proceed = confirm('No receipt exists for this contract yet. Would you like to generate one?');
+    if (!proceed) return;
+  }
+  openEditReceiptForm();
+});
+
+// Prefills and opens the Edit Receipt form -- always FRESH from the
+// contract's own current fields (never from anything previously typed
+// into a receipt), whether this is the first receipt for this contract or
+// a re-edit/regenerate of an existing one. Shared by both "Edit Receipt"
+// and "View Receipt" (when the latter finds nothing to open and the user
+// opts to generate one).
+function openEditReceiptForm() {
+  const r = currentEditRecord;
+  if (!r) return;
+
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  document.getElementById('r_receiptDate').value = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+  document.getElementById('r_name').value = r.name || '';
+  document.getElementById('r_bikeModel').value = r.bikeModel || '';
+  document.getElementById('r_cc').value = '';
+  document.getElementById('r_periodFrom').value = toIsoDateForInput(r.rentingDateFrom);
+  document.getElementById('r_periodTo').value = toIsoDateForInput(r.returnDate);
+  // "Total price" on the contract is the FULL amount paid (rental +
+  // delivery combined), not the rental portion alone -- so Total Paid
+  // mirrors it as-is, and Rental Fee is back-calculated as total minus
+  // delivery, to avoid double-counting the delivery fee.
+  const totalPriceNum = Number(r.totalPrice) || 0;
+  const deliveryFeeNum = Number(r.deliveryFee) || 0;
+  const rentalFeeNum = totalPriceNum - deliveryFeeNum;
+
+  document.getElementById('r_rentalFee').value = rentalFeeNum || '';
+  document.getElementById('r_deliveryFee').value = r.deliveryFee || '';
+  document.getElementById('r_otherLabel').value = '';
+  document.getElementById('r_otherAmount').value = '';
+
+  document.getElementById('r_totalPaid').value = totalPriceNum || '';
+
+  const mapped = mapPaidByToMethod(r.paidBy);
+  r_paymentMethod.value = mapped.method;
+  r_otherMethodText.value = mapped.otherText;
+  if (mapped.method === 'other') {
+    r_otherMethodText.classList.remove('hidden');
+  } else {
+    r_otherMethodText.classList.add('hidden');
+  }
+
+  document.getElementById('r_receivedBy').value = 'Miss. Arparatchanee';
+
+  receiptFormStatusBox.className = 'status';
+  receiptFormStatusBox.textContent = '';
+  receiptFormView.style.display = '';
+  receiptConfirmView.style.display = 'none';
+  receiptConfirmStatusBox.className = 'status';
+  receiptConfirmStatusBox.textContent = '';
+  receiptBackdrop.classList.add('show');
+}
+
+function fmtMoneyForSynopsis(v) {
+  const n = Number(v);
+  return (v !== '' && v !== null && v !== undefined && !isNaN(n)) ? ('฿' + n.toLocaleString('en-US')) : '—';
+}
+const PAYMENT_METHOD_LABELS = { cash: 'Cash', scan: 'Thai QR Scan', wise: 'Wise', revolut: 'Revolut', other: 'Other' };
+
+receiptForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+
+  const totalPaid = document.getElementById('r_totalPaid').value;
+  if (totalPaid === '' || isNaN(Number(totalPaid))) {
+    receiptFormStatusBox.textContent = 'Please enter the total amount paid.';
+    receiptFormStatusBox.className = 'status err';
+    return;
+  }
+  const method = r_paymentMethod.value;
+  if (method === 'other' && !r_otherMethodText.value.trim()) {
+    receiptFormStatusBox.textContent = 'Please describe the "Other" payment method, or choose a different one.';
+    receiptFormStatusBox.className = 'status err';
+    r_otherMethodText.focus();
+    return;
+  }
+  receiptFormStatusBox.className = 'status';
+  receiptFormStatusBox.textContent = '';
+
+  const periodFrom = document.getElementById('r_periodFrom').value;
+  const periodTo = document.getElementById('r_periodTo').value;
+  const periodText = [periodFrom, periodTo].filter(Boolean).map(formatDateDisplay).join(' to ') || '—';
+
+  const otherLabel = document.getElementById('r_otherLabel').value.trim();
+  const otherAmount = document.getElementById('r_otherAmount').value;
+  const ccVal = document.getElementById('r_cc').value.trim();
+
+  const methodLabel = method === 'other'
+    ? ('Other (' + r_otherMethodText.value.trim() + ')')
+    : PAYMENT_METHOD_LABELS[method];
+
+  receiptSynopsisBox.innerHTML =
+    '<div><b>Name:</b> ' + (document.getElementById('r_name').value.trim() || '—') + '</div>' +
+    '<div><b>Receipt No.:</b> auto-generated</div>' +
+    '<div><b>Date:</b> ' + formatDateDisplay(document.getElementById('r_receiptDate').value) + '</div>' +
+    '<div><b>Scooter:</b> ' + (document.getElementById('r_bikeModel').value.trim() || '—') + (ccVal ? ' (' + ccVal + ')' : '') + '</div>' +
+    '<div><b>Rental period:</b> ' + periodText + '</div>' +
+    '<div><b>Rental fee:</b> ' + fmtMoneyForSynopsis(document.getElementById('r_rentalFee').value) + '</div>' +
+    '<div><b>Delivery fee:</b> ' + fmtMoneyForSynopsis(document.getElementById('r_deliveryFee').value) + '</div>' +
+    (otherLabel || otherAmount ? '<div><b>Other (' + (otherLabel || '—') + '):</b> ' + fmtMoneyForSynopsis(otherAmount) + '</div>' : '') +
+    '<div><b>Total amount paid:</b> ' + fmtMoneyForSynopsis(totalPaid) + '</div>' +
+    '<div><b>Payment method:</b> ' + methodLabel + '</div>' +
+    '<div><b>Received by:</b> ' + (document.getElementById('r_receivedBy').value.trim() || '—') + '</div>';
+
+  receiptFormView.style.display = 'none';
+  receiptConfirmView.style.display = '';
+});
+
+receiptBackBtn.addEventListener('click', () => {
+  receiptConfirmView.style.display = 'none';
+  receiptFormView.style.display = '';
+});
+
+receiptConfirmBtn.addEventListener('click', async () => {
+  if (!currentEditRecord) return;
+  const originalText = receiptConfirmBtn.textContent;
+  receiptConfirmBtn.disabled = true;
+  receiptBackBtn.disabled = true;
+  receiptConfirmBtn.textContent = 'Generating…';
+  receiptConfirmStatusBox.className = 'status';
+  receiptConfirmStatusBox.textContent = '';
+
+  const method = r_paymentMethod.value;
+  const payload = {
+    action: 'generateReceipt',
+    rowNumber: currentEditRecord.rowNumber,
+    number: currentEditRecord.number,
+    // Only used as a last-resort fallback if this contract's row has no
+    // stored Doc/PDF/photo link yet to anchor the folder lookup on --
+    // see generateReceiptDocument's comment in Code.gs.
+    rentingDateFrom: toIsoDateForInput(currentEditRecord.rentingDateFrom),
+    // No receiptNo field on this form -- always left blank so the backend
+    // auto-assigns the next number in sequence.
+    receiptNo: '',
+    receiptDate: document.getElementById('r_receiptDate').value,
+    name: document.getElementById('r_name').value.trim(),
+    bikeModel: document.getElementById('r_bikeModel').value.trim(),
+    cc: document.getElementById('r_cc').value.trim(),
+    rentalPeriodFrom: document.getElementById('r_periodFrom').value,
+    rentalPeriodTo: document.getElementById('r_periodTo').value,
+    rentalFee: document.getElementById('r_rentalFee').value,
+    deliveryFee: document.getElementById('r_deliveryFee').value,
+    otherLabel: document.getElementById('r_otherLabel').value.trim(),
+    otherAmount: document.getElementById('r_otherAmount').value,
+    totalPaid: document.getElementById('r_totalPaid').value,
+    paymentMethod: method,
+    otherMethodText: method === 'other' ? r_otherMethodText.value.trim() : '',
+    receivedBy: document.getElementById('r_receivedBy').value.trim()
+  };
+
+  try {
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
+    currentEditRecord.receiptPdfUrl = data.pdfUrl;
+    receiptConfirmStatusBox.innerHTML = 'Receipt updated' + (data.receiptNo ? ' (No. ' + data.receiptNo + ')' : '') + '. ' +
+      '<a href="' + data.pdfUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open PDF</a>';
+    receiptConfirmStatusBox.className = 'status ok';
+  } catch (err) {
+    receiptConfirmStatusBox.textContent = 'Could not generate the receipt: ' + err.message;
+    receiptConfirmStatusBox.className = 'status err';
+  } finally {
+    receiptConfirmBtn.disabled = false;
+    receiptBackBtn.disabled = false;
+    receiptConfirmBtn.textContent = originalText;
   }
 });
 
@@ -1252,12 +1665,12 @@ function openEditModal(r) {
   editStatusBox.textContent = '';
 
   // Both buttons always show and stay enabled -- if this record has no
-  // stored link, clicking one triggers the findContractDocument fallback
-  // search (see viewContractDocument) rather than pre-emptively disabling
-  // anything based on what's cached right now.
+  // stored PDF link, clicking "View Contract" triggers the
+  // findContractDocument fallback search (see viewContract) rather than
+  // pre-emptively disabling anything based on what's cached right now.
   editViewDocsRow.style.display = 'flex';
   editViewPdfBtn.disabled = false;
-  editViewDocBtn.disabled = false;
+  editUpdateContractBtn.disabled = false;
   editNoDocsMsg.style.display = 'none';
 
   document.getElementById('e_name').value = r.name || '';
@@ -1477,20 +1890,23 @@ form.addEventListener('submit', async (e) => {
     stopSaveProgress();
     if (data.success) {
       const docLinkHtml = data.contractPdfUrl
-        ? ' <a href="' + data.contractPdfUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open contract PDF</a>' +
-          (data.contractDocUrl ? ' · <a href="' + data.contractDocUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open Doc</a>' : '')
+        ? ' <a href="' + data.contractPdfUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open contract PDF</a>'
         : (data.contractDocWarning ? ' (' + data.contractDocWarning + ')' : '');
       const photoLinkHtml = data.passportPhotoUrl
         ? ' · <a href="' + data.passportPhotoUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open photo of passport</a>'
         : '';
+      const receiptLinkHtml = data.receiptPdfUrl
+        ? ' · <a href="' + data.receiptPdfUrl + '" target="_blank" rel="noopener" style="color:inherit; text-decoration:underline; font-weight:600;">Open receipt PDF</a>' +
+          (data.receiptNo ? ' (No. ' + data.receiptNo + ')' : '')
+        : '';
       if (data.warning) {
-        statusBox.innerHTML = 'Added — "' + payload.name + '" saved, but: ' + data.warning + docLinkHtml + photoLinkHtml;
+        statusBox.innerHTML = 'Added — "' + payload.name + '" saved, but: ' + data.warning + docLinkHtml + photoLinkHtml + receiptLinkHtml;
         statusBox.className = 'status warn';
       } else {
         const checksNote = data.checksTotal
           ? ' ✓ Verified: ' + data.checksPassed + '/' + data.checksTotal + ' write-back checks passed.'
           : '';
-        statusBox.innerHTML = 'Added — "' + payload.name + '" saved to the Contract sheet.' + checksNote + docLinkHtml + photoLinkHtml;
+        statusBox.innerHTML = 'Added — "' + payload.name + '" saved to the Contract sheet.' + checksNote + docLinkHtml + photoLinkHtml + receiptLinkHtml;
         statusBox.className = data.contractPdfUrl ? 'status ok' : (data.contractDocWarning ? 'status warn' : 'status ok');
       }
       sessionCount++;
@@ -1617,6 +2033,105 @@ function loadBikeNames() {
 
 loadBikeNames();
 
+// ---- "Currently rented" logic copied verbatim from the Available Bikes
+// page (available-bikes.html's normalizeBikeName / bikeNamesMatch /
+// findCurrentRenter) so the two pages always agree on which bikes are
+// free -- same matching quirks and all, rather than a differently-tuned
+// version that could disagree with Available Bikes on an edge case. This
+// checks the "customer" sheet (the same one Available Bikes reads, via
+// the plain scriptUrl GET with no action param), not the newer Contract
+// sheet's status column -- a bike counts as taken if ANY customer-sheet
+// row for it has a return date today or later. ----
+function normalizeBikeName(s) {
+  return (s || '').toString()
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+const DISTINGUISHING_SUFFIXES = new Set([
+  'one','two','three','four','five','six','seven','eight','nine','ten',
+  'i','ii','iii','iv','v','vi','vii','viii','ix','x',
+  '1','2','3','4','5','6','7','8','9','10'
+]);
+function bikeNamesMatch(a, b) {
+  const na = normalizeBikeName(a);
+  const nb = normalizeBikeName(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+
+  const ta = na.split(' ');
+  const tb = nb.split(' ');
+  const shorter = ta.length <= tb.length ? ta : tb;
+  const longer = ta.length <= tb.length ? tb : ta;
+
+  const isPrefix = shorter.every((tok, i) => tok === longer[i]);
+  if (isPrefix) {
+    const extra = longer.slice(shorter.length);
+    if (extra.some(t => DISTINGUISHING_SUFFIXES.has(t))) return false;
+    return true;
+  }
+
+  return na.includes(nb) || nb.includes(na);
+}
+
+// ---- The "customer" sheet, fetched the exact same way Available Bikes
+// does (plain GET, no action param) -- separate from loadRows() above,
+// which fetches the newer Contract sheet instead. Never blocks the page
+// gate on its own: if this fails, findCurrentRenter just treats nothing
+// as rented (same graceful fallback available-bikes.html uses), so a bad
+// fetch here means the bike list briefly over-offers rather than the Add
+// form becoming unusable. ----
+let customerRows = null;
+let customerRowsPromise = null;
+function loadCustomerRows() {
+  if (customerRowsPromise) return customerRowsPromise;
+  customerRowsPromise = fetch(scriptUrl)
+    .then(res => res.json())
+    .then(data => {
+      customerRows = (data && data.success) ? data.rows : [];
+      return customerRows;
+    })
+    .catch(() => {
+      customerRows = [];
+      customerRowsPromise = null;
+      return [];
+    });
+  return customerRowsPromise;
+}
+loadCustomerRows();
+
+function findCurrentRenter(bikeName) {
+  if (!customerRows || !customerRows.length) return null;
+  if (!normalizeBikeName(bikeName)) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const candidates = customerRows
+    .map((r, sheetIndex) => ({ r, sheetIndex }))
+    .filter(({ r }) => {
+      if (!bikeNamesMatch(r.bikeModel, bikeName)) return false;
+      const ret = parseFlexibleDate(r.returnDate);
+      if (!ret) return false;
+      ret.setHours(0, 0, 0, 0);
+      return ret >= today;
+    });
+
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => b.sheetIndex - a.sheetIndex);
+  return candidates[0].r;
+}
+
+// ---- Bikes currently rented, per findCurrentRenter above -- mirrors
+// available-bikes.html's renderList(): bikeNames.filter(name =>
+// !findCurrentRenter(name)). Recomputed each call (not cached) so it
+// stays accurate as customerRows finishes loading. ----
+function getAvailableBikeNames() {
+  return bikeNames.filter(name => !findCurrentRenter(name));
+}
+
 function attachBikeModelAutocomplete() {
   const input = document.getElementById('bikeModel');
   const list = document.querySelector('.ac-list[data-for="bikeModel"]');
@@ -1629,7 +2144,7 @@ function attachBikeModelAutocomplete() {
   }
 
   function open(query) {
-    const options = bikeNames.filter(v => tokenMatch(v, query)).slice(0, 8);
+    const options = getAvailableBikeNames().filter(v => tokenMatch(v, query)).slice(0, 8);
     if (!query || options.length === 0) { close(); return; }
     list.innerHTML = options.map((v, i) =>
       `<div class="ac-item" data-index="${i}">${highlight(v, query)}</div>`

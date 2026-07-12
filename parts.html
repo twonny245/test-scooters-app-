@@ -602,19 +602,26 @@ function selectBike(bikeName) {
       input.autocomplete = 'off';
 
       if (header === kmHeaderActual) {
-        const fieldRow = document.createElement('div');
-        fieldRow.className = 'field-with-action';
-        fieldRow.appendChild(input);
-
-        const camBtn = document.createElement('button');
-        camBtn.type = 'button';
-        camBtn.className = 'camera-btn';
-        camBtn.title = 'Take a photo of the speedometer';
-        camBtn.textContent = '📷';
-        camBtn.addEventListener('click', () => openCameraFor(id));
-        fieldRow.appendChild(camBtn);
-
-        wrap.appendChild(fieldRow);
+        // Camera-read button disabled for now -- the AI-assisted odometer
+        // reading (readOdometerWithAI in Code.gs / proceedToOdoModal
+        // below) wasn't reading reliably enough yet. Code kept in place,
+        // just not wired into the page, in case this gets revisited.
+        // To bring the button back, uncomment this block and swap the
+        // wrap.appendChild(input) two lines down for wrap.appendChild(fieldRow).
+        //
+        // const fieldRow = document.createElement('div');
+        // fieldRow.className = 'field-with-action';
+        // fieldRow.appendChild(input);
+        //
+        // const camBtn = document.createElement('button');
+        // camBtn.type = 'button';
+        // camBtn.className = 'camera-btn';
+        // camBtn.title = 'Take a photo of the speedometer';
+        // camBtn.textContent = '📷';
+        // camBtn.addEventListener('click', () => openCameraFor(id));
+        // fieldRow.appendChild(camBtn);
+        //
+        wrap.appendChild(input);
       } else {
         wrap.appendChild(input);
       }
@@ -861,27 +868,15 @@ document.getElementById('saveBtn').addEventListener('click', performSave);
 document.getElementById('kmSaveBtn').addEventListener('click', performQuickSave);
 
 // ---------------- Camera capture + auto-read for speedometer photos ----------------
-// This runs an OCR pass entirely in the browser (no server or API key
-// involved) restricted to digits. It's best-effort: whatever it reads is
-// shown as an editable starting point, never applied silently, since
+// The cropped photo is sent to Claude (vision) to read the digits, via the
+// same readOdometerWithAI backend action / ANTHROPIC_API_KEY used by the
+// passport reader on contract.html. It's best-effort: whatever comes back
+// is shown as an editable starting point, never applied silently, since
 // speedometer photos (glare, angle, digit vs. needle dials) aren't always
-// clean reads.
+// clean reads. (Previously ran Tesseract.js entirely client-side -- swapped
+// out because it struggled with exactly those cases.)
 
 let ocrTargetKmFieldId = null;
-let tesseractLoadPromise = null;
-
-function loadTesseract() {
-  if (window.Tesseract) return Promise.resolve();
-  if (tesseractLoadPromise) return tesseractLoadPromise;
-  tesseractLoadPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('reader library failed to load'));
-    document.head.appendChild(script);
-  });
-  return tesseractLoadPromise;
-}
 
 function openCameraFor(kmFieldId) {
   ocrTargetKmFieldId = kmFieldId;
@@ -915,7 +910,21 @@ function todayInputValue() {
 function handleSelectedFile(file) {
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => openCropModal(reader.result);
+  reader.onload = () => {
+    // Crop step skipped for now, to test the AI reader against the full,
+    // uncropped photo first -- same "whole image" path the crop modal's
+    // own "Skip crop" button already used (buildProcessedImage(null)).
+    // The crop modal/box code below is untouched and still fully wired
+    // up; to bring the crop step back, restore the one line this
+    // replaced: `openCropModal(reader.result);`
+    const runNow = () => proceedToOdoModal(buildProcessedImage(null));
+    if (cropImage.src === reader.result && cropImage.complete && cropImage.naturalWidth) {
+      runNow(); // same photo picked again -- src unchanged, onload won't refire
+    } else {
+      cropImage.onload = runNow;
+      cropImage.src = reader.result;
+    }
+  };
   reader.readAsDataURL(file);
 }
 
@@ -1033,34 +1042,10 @@ cropHandle.addEventListener('pointermove', (e) => {
 cropHandle.addEventListener('pointerup', () => { resizeState = null; });
 cropHandle.addEventListener('pointercancel', () => { resizeState = null; });
 
-// ---- Step 3: preprocessing — grayscale + contrast stretch, done on a canvas ----
-// Cheap, dependency-free, and it's what tends to matter most for
-// Tesseract on phone photos: flat lighting + low contrast is the
-// single biggest cause of misreads, more than resolution.
-function preprocessCanvas(canvas) {
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
-  const imgData = ctx.getImageData(0, 0, w, h);
-  const d = imgData.data;
-  const gray = new Float32Array(w * h);
-  let min = 255, max = 0;
-  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
-    const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-    gray[p] = g;
-    if (g < min) min = g;
-    if (g > max) max = g;
-  }
-  const range = Math.max(1, max - min);
-  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
-    const v = Math.round((gray[p] - min) * (255 / range));
-    d[i] = d[i + 1] = d[i + 2] = v;
-  }
-  ctx.putImageData(imgData, 0, 0);
-}
-
-// Crops (or, if skipped, takes the whole image) then upscales small
-// crops so digits aren't just a handful of pixels tall, then runs the
-// grayscale/contrast pass above.
+// ---- Step 3: crop (or, if skipped, take the whole image), then upscale
+// small crops so digits aren't just a handful of pixels tall. No
+// grayscale/contrast step here -- that was a Tesseract-specific crutch;
+// Claude reads the natural color photo just fine on its own. ----
 function buildProcessedImage(sourceRectOrNull) {
   const naturalW = cropImage.naturalWidth, naturalH = cropImage.naturalHeight;
   let sx, sy, sw, sh;
@@ -1087,7 +1072,6 @@ function buildProcessedImage(sourceRectOrNull) {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(cropImage, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-  preprocessCanvas(canvas);
   return canvas.toDataURL('image/png');
 }
 
@@ -1128,27 +1112,23 @@ async function proceedToOdoModal(processedDataUrl) {
   ocrStatus.innerHTML = '<div class="spinner"></div> Reading number from photo…';
 
   try {
-    await loadTesseract();
-    const worker = await Tesseract.createWorker('eng');
+    const commaIdx = processedDataUrl.indexOf(',');
+    const base64 = commaIdx !== -1 ? processedDataUrl.slice(commaIdx + 1) : processedDataUrl;
+    const res = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'readOdometerWithAI',
+        imageBase64: base64,
+        imageMimeType: 'image/png'
+      })
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Unknown error');
 
-    async function tryRead(psm) {
-      await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: psm });
-      const { data: { text } } = await worker.recognize(processedDataUrl);
-      return (text.match(/\d+/g) || []).sort((a, b) => b.length - a.length);
-    }
-
-    // PSM 7 = single line of text — right fit for a tight digit-strip crop.
-    // A tight crop has no paragraphs for Tesseract's default layout guesser
-    // to find, so without this hint it often returns noise instead of the
-    // actual digits. If that still comes up empty (e.g. a more skewed
-    // photo), fall back to PSM 6 (a single uniform block) before giving up.
-    let digitGroups = await tryRead('7');
-    if (!digitGroups.length) digitGroups = await tryRead('6');
-    await worker.terminate();
-
-    if (digitGroups.length) {
-      document.getElementById('odoKmInput').value = digitGroups[0];
-      ocrStatus.textContent = 'Detected ' + digitGroups[0] + ' — check it against the photo before saving.';
+    if (data.km) {
+      document.getElementById('odoKmInput').value = data.km;
+      ocrStatus.textContent = 'Detected ' + data.km + ' — check it against the photo before saving.';
     } else {
       ocrStatus.textContent = 'Could not read a number automatically — type it in below.';
     }

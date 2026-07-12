@@ -115,6 +115,9 @@
   .bc-btn:disabled{ opacity:.55; cursor:default; }
   .bc-btn.return-btn{ background:var(--petrol); color:#fff; border-color:var(--petrol); }
   .bc-btn.extend-btn{ background:#fff; color:var(--muted); }
+  .bc-btn.edit-time-btn{ background:#fff; color:var(--muted); }
+  .bc-btn.confirm-edit-time{ background:var(--cone); color:#fff; border-color:var(--cone); }
+  .bc-btn.cancel-edit-time{ background:#fff; color:var(--muted); }
   .bc-btn.confirm-return{ background:var(--cone); color:#fff; border-color:var(--cone); }
   .bc-btn.cancel-return{ background:#fff; color:var(--muted); }
 
@@ -123,6 +126,11 @@
     flex:1 1 100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px;
     font-size:14px; font-family:'Inter',sans-serif; background:#fff; color:var(--ink);
   }
+  .extend-datedays-row{
+    flex:1 1 100%; display:flex; align-items:center; gap:8px;
+  }
+  .extend-datedays-row .picker-input{ flex:1 1 0; }
+  .extend-datedays-row .or-label{ flex:0 0 auto; font-size:12px; color:var(--muted); }
   .extend-month-row{
     flex:1 1 100%; display:flex; align-items:center; gap:7px;
     font-size:13px; color:var(--ink); font-weight:500;
@@ -516,6 +524,9 @@ let savingReturnStage = 'connecting'; // 'connecting' | 'saving' -- fake staged 
 let openExtendRowNumber = null;   // rowNumber whose inline extend form is showing
 let savingExtendRowNumber = null; // rowNumber currently being saved as extended
 let savingExtendStage = 'connecting'; // 'connecting' | 'saving' -- fake staged progress text on the Confirm button
+let openEditTimeRowNumber = null;   // rowNumber whose inline "edit pickup time" form is showing
+let savingEditTimeRowNumber = null; // rowNumber currently being saved with a new return time
+let savingEditTimeStage = 'connecting'; // 'connecting' | 'saving' -- fake staged progress text on the Confirm button
 
 // While a return/extend save is in flight, disable every button on the
 // page -- not just the row's own Confirm button -- so a double-click (or
@@ -561,7 +572,11 @@ function renterActionsHtml(renter) {
     const isSaving = savingExtendRowNumber === rowNumber;
     return `
       <div class="bc-actions bc-actions-picker">
-        <input type="number" min="1" step="1" class="picker-input" id="extendDaysInput-${rowNumber}" placeholder="Days to extend" ${isSaving ? 'disabled' : ''}>
+        <div class="extend-datedays-row">
+          <input type="date" class="picker-input" id="extendDateInput-${rowNumber}" ${isSaving ? 'disabled' : ''}>
+          <span class="or-label">or</span>
+          <input type="number" min="1" step="1" class="picker-input" id="extendDaysInput-${rowNumber}" placeholder="Days to extend" ${isSaving ? 'disabled' : ''}>
+        </div>
         <input type="number" min="0" step="any" class="picker-input" id="extendAmountInput-${rowNumber}" placeholder="Amount paid (฿)" ${isSaving ? 'disabled' : ''}>
         <select class="picker-input" id="extendPaidByInput-${rowNumber}" ${isSaving ? 'disabled' : ''}>
           <option value="">Paid by…</option>
@@ -588,11 +603,34 @@ function renterActionsHtml(renter) {
     `;
   }
 
+  if (openEditTimeRowNumber === rowNumber) {
+    const isSaving = savingEditTimeRowNumber === rowNumber;
+    // Defaults to whatever pickup date/time the calendar is currently
+    // showing: the confirmed date if staff have already adjusted this
+    // booking once, otherwise the original due date. Either way, this
+    // popup only ever writes to the calendar-only confirmed-date column
+    // -- never to the booking's actual due date.
+    const defaultDate = parseFlexibleDate(renter.confirmedReturnDate) || parseFlexibleDate(renter.returnDate);
+    const editDateValue = defaultDate ? toIsoDate(defaultDate) : todayIso();
+    return `
+      <div class="bc-actions bc-actions-picker">
+        <div class="extend-datedays-row">
+          <input type="date" class="picker-input" id="editDateInput-${rowNumber}" value="${editDateValue}" ${isSaving ? 'disabled' : ''}>
+          <input type="time" class="picker-input" id="editTimeInput-${rowNumber}" value="${renter.returnTime || ''}" ${isSaving ? 'disabled' : ''}>
+        </div>
+        <div class="extend-note">Adjusts the pickup date &amp; time shown on the bike-returns calendar only — the booking's actual due date on this page is not changed.</div>
+        <button class="bc-btn confirm-edit-time" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>${isSaving ? (savingEditTimeStage === 'saving' ? 'Saving…' : 'Connecting…') : 'Confirm'}</button>
+        <button class="bc-btn cancel-edit-time" data-row="${rowNumber}" ${isSaving ? 'disabled' : ''}>Cancel</button>
+      </div>
+    `;
+  }
+
   return `
     <div class="bc-actions">
       <button class="bc-btn return-btn" data-row="${rowNumber}">Return</button>
       <button class="bc-btn extend-btn" data-row="${rowNumber}">Extend</button>
       <button class="bc-btn swap-btn" data-row="${rowNumber}">Swap Bike</button>
+      <button class="bc-btn edit-time-btn" data-row="${rowNumber}">Adjust Pickup</button>
     </div>
   `;
 }
@@ -750,6 +788,7 @@ document.getElementById('listBox').addEventListener('click', (e) => {
   if (returnBtn) {
     openReturnRowNumber = parseInt(returnBtn.dataset.row, 10);
     openExtendRowNumber = null;
+    openEditTimeRowNumber = null;
     render();
     return;
   }
@@ -778,6 +817,7 @@ document.getElementById('listBox').addEventListener('click', (e) => {
   if (extendBtn) {
     openExtendRowNumber = parseInt(extendBtn.dataset.row, 10);
     openReturnRowNumber = null;
+    openEditTimeRowNumber = null;
     render();
     return;
   }
@@ -834,8 +874,93 @@ document.getElementById('listBox').addEventListener('click', (e) => {
       return;
     }
     confirmExtend(rowNumber, days, amount, extendMonth, paidBy, paidFromDeposit, depositCategory, depositRow);
+    return;
+  }
+
+  const editTimeBtn = e.target.closest('.edit-time-btn');
+  if (editTimeBtn) {
+    openEditTimeRowNumber = parseInt(editTimeBtn.dataset.row, 10);
+    openReturnRowNumber = null;
+    openExtendRowNumber = null;
+    render();
+    return;
+  }
+
+  const cancelEditTimeBtn = e.target.closest('.cancel-edit-time');
+  if (cancelEditTimeBtn) {
+    openEditTimeRowNumber = null;
+    render();
+    return;
+  }
+
+  const confirmEditTimeBtn = e.target.closest('.confirm-edit-time');
+  if (confirmEditTimeBtn) {
+    const rowNumber = parseInt(confirmEditTimeBtn.dataset.row, 10);
+    const dateInput = document.getElementById('editDateInput-' + rowNumber);
+    const timeInput = document.getElementById('editTimeInput-' + rowNumber);
+    const isoDate = dateInput ? dateInput.value : '';
+    const hhmm = timeInput ? timeInput.value : '';
+    if (!isoDate) {
+      alert('Pick a date first.');
+      return;
+    }
+    if (!hhmm) {
+      alert('Pick a time first.');
+      return;
+    }
+    confirmEditTime(rowNumber, isoDate, hhmm);
   }
 });
+
+// Parses an <input type="date">'s yyyy-MM-dd value into a local Date at
+// midnight -- deliberately NOT reusing parseFlexibleDate's generic
+// `new Date(str)` fallback for this, since browsers parse a bare
+// "yyyy-MM-dd" string as UTC midnight, which can land on the wrong local
+// day depending on the device's timezone. Building the Date from its
+// year/month/day parts directly sidesteps that entirely.
+function parseIsoDateLocal(iso) {
+  const m = String(iso || '').trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!m) return null;
+  return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+}
+
+function extendCurrentDueDate(rowNumber) {
+  const renter = (customerRows || []).find(r => r.rowNumber === rowNumber);
+  return renter ? parseFlexibleDate(renter.returnDate) : null;
+}
+
+// The extend form's "Extend to" date and "Days" fields are two views of
+// the same thing -- editing either one recomputes the other from the
+// row's current due date, so staff can use whichever is more convenient
+// in the moment without the two ever disagreeing about what's actually
+// being requested. Whichever field's value confirmExtend() ends up
+// reading (always the days field, today) is guaranteed correct either way.
+function syncExtendDaysFromDate(rowNumber) {
+  const dateInput = document.getElementById('extendDateInput-' + rowNumber);
+  const daysInput = document.getElementById('extendDaysInput-' + rowNumber);
+  if (!dateInput || !daysInput || !dateInput.value) return;
+
+  const dueDate = extendCurrentDueDate(rowNumber);
+  const picked = parseIsoDateLocal(dateInput.value);
+  if (!dueDate || !picked) return;
+
+  const days = Math.round((picked - dueDate) / 86400000);
+  daysInput.value = days > 0 ? days : '';
+  maybeAutofillExtendAmount(rowNumber);
+}
+
+function syncExtendDateFromDays(rowNumber) {
+  const dateInput = document.getElementById('extendDateInput-' + rowNumber);
+  const daysInput = document.getElementById('extendDaysInput-' + rowNumber);
+  if (!dateInput || !daysInput) return;
+
+  const days = parseInt(daysInput.value, 10);
+  const dueDate = extendCurrentDueDate(rowNumber);
+  if (!days || days <= 0 || !dueDate) return;
+
+  const newDate = new Date(dueDate.getTime() + days * 86400000);
+  dateInput.value = toIsoDate(newDate);
+}
 
 // Auto-fills the "Amount paid" field on the extend form with the price-
 // calculator quote for the extension period, whenever it's a long extension
@@ -869,7 +994,15 @@ function maybeAutofillExtendAmount(rowNumber) {
 document.getElementById('listBox').addEventListener('input', (e) => {
   const daysEl = e.target.closest('[id^="extendDaysInput-"]');
   if (daysEl) {
-    maybeAutofillExtendAmount(parseInt(daysEl.id.replace('extendDaysInput-', ''), 10));
+    const rowNumber = parseInt(daysEl.id.replace('extendDaysInput-', ''), 10);
+    syncExtendDateFromDays(rowNumber);
+    maybeAutofillExtendAmount(rowNumber);
+    return;
+  }
+
+  const dateEl = e.target.closest('[id^="extendDateInput-"]');
+  if (dateEl) {
+    syncExtendDaysFromDate(parseInt(dateEl.id.replace('extendDateInput-', ''), 10));
   }
 });
 
@@ -1015,6 +1148,58 @@ function confirmReturn(rowNumber, isoDate) {
       savingReturnRowNumber = null;
       render();
       alert('Could not mark as returned: ' + err.message);
+    });
+}
+
+// Lets staff record the actual agreed pickup DATE & TIME on an active
+// booking -- e.g. the intake form had a placeholder time, or the customer
+// is returning a day early. This only ever updates the shared bike-
+// returns calendar (moving/recoloring that one event); the booking's
+// actual due date shown elsewhere on this page (overdue badge, extend
+// math, etc.) is never touched.
+function confirmEditTime(rowNumber, isoDate, hhmm) {
+  savingEditTimeRowNumber = rowNumber;
+  savingEditTimeStage = 'connecting';
+  render();
+  setAllButtonsDisabled(true);
+  const stageTimer = setTimeout(() => { savingEditTimeStage = 'saving'; render(); setAllButtonsDisabled(true); }, 500);
+
+  fetch(scriptUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'updateReturnPickup', rowNumber: rowNumber, returnDate: isoDate, returnTime: hhmm })
+  })
+    .then(res => res.json())
+    .then(result => {
+      clearTimeout(stageTimer);
+      setAllButtonsDisabled(false);
+      if (!result.success) throw new Error(result.error || 'Could not save.');
+      if (result.warning) alert('Saved, but: ' + result.warning);
+      openEditTimeRowNumber = null;
+      savingEditTimeRowNumber = null;
+
+      // updateReturnPickup only ever touches this one customer row's
+      // return time and confirmed-pickup-date columns (and the shared
+      // calendar event to match) -- nothing else shifts, so the on-page
+      // list can be updated directly instead of waiting on a full reload
+      // of the bikes + customer data.
+      const row = (customerRows || []).find(r => r.rowNumber === rowNumber);
+      if (row) {
+        row.returnTime = hhmm;
+        row.confirmedReturnDate = isoToDmy(isoDate);
+        render();
+      } else {
+        // Shouldn't normally happen, but fall back to a full reload rather
+        // than leave the list looking out of date if it ever does.
+        return loadData();
+      }
+    })
+    .catch(err => {
+      clearTimeout(stageTimer);
+      setAllButtonsDisabled(false);
+      savingEditTimeRowNumber = null;
+      render();
+      alert('Could not update the return time: ' + err.message);
     });
 }
 

@@ -34,6 +34,18 @@ var BIKES_EXPENSE_SECTION_START_ROW = 52;
 var PHOTOS_ROOT_FOLDER_ID = '1E11bBgY5BeohoSiDCffA1Uz4-YQJOt7U';
 
 // =====================================================================
+// ---- Google Calendar sync: one shared calendar showing every bike's
+// return date, kept in sync with the "customer" sheet. ----
+//
+// PLACEHOLDER -- replace with the real Calendar ID once the dedicated
+// calendar has been created (Google Calendar -> that calendar's Settings
+// -> "Integrate calendar" -> Calendar ID), then redeploy. Until this is
+// replaced, syncCalendarForCustomerRow() below skips itself quietly so
+// nothing breaks.
+var CALENDAR_ID = 'aascooterchiangmai@gmail.com';
+// =====================================================================
+
+// =====================================================================
 // ---- Post-write verification ("did it really land?") ----
 //
 // Every function below that writes to the spreadsheet also records WHAT
@@ -177,6 +189,9 @@ function doPost(e) {
     if (data.action === 'markReturned') {
       return markBikeReturned(data);
     }
+    if (data.action === 'updateReturnPickup') {
+      return updateReturnPickup(data);
+    }
     if (data.action === 'extendBike') {
       return extendBikeRow(data);
     }
@@ -228,11 +243,23 @@ function doPost(e) {
     if (data.action === 'findContractDocument') {
       return findContractDocumentEntry(data);
     }
+    if (data.action === 'regenerateContract') {
+      return regenerateContractDocumentEntry(data);
+    }
     if (data.action === 'uploadPassportPhoto') {
       return uploadPassportPhotoEntry(data);
     }
+    if (data.action === 'readPassportWithAI') {
+      return readPassportWithAIEntry(data);
+    }
+    if (data.action === 'readOdometerWithAI') {
+      return readOdometerWithAIEntry(data);
+    }
     if (data.action === 'findPassportPhoto') {
       return findPassportPhotoEntry(data);
+    }
+    if (data.action === 'generateReceipt') {
+      return generateReceiptEntry(data);
     }
 
     // ---- Customer-intake behavior ----
@@ -293,6 +320,10 @@ function doPost(e) {
     verifyCell('customer', newRow, 9, formatIsoDateToDMY(data.returnDate), 'customer row: return date');
     verifyCell('customer', newRow, 12, data.totalPrice || '', 'customer row: total price');
     verifyCell('customer', newRow, 13, data.paidBy || '', 'customer row: paid by');
+
+    // Keeps the shared bike-returns calendar in sync -- see CALENDAR_ID
+    // near the top of this file.
+    syncCalendarForCustomerRow(newRow);
 
     var fromDate = data.rentingDateFrom ? new Date(data.rentingDateFrom + 'T00:00:00') : null;
     var toDate = data.returnDate ? new Date(data.returnDate + 'T00:00:00') : null;
@@ -497,7 +528,7 @@ function addContractEntry(data) {
     ]);
 
     var newRow = sheet.getLastRow();
-    var newRange = sheet.getRange(newRow, 1, 1, 20); // A..T, incl. the doc/pdf/photo link columns filled in below
+    var newRange = sheet.getRange(newRow, 1, 1, 21); // A..U, incl. the doc/pdf/photo/receipt link columns filled in below
     newRange.setBorder(true, true, true, true, true, true);
 
     // Register the key cells of the new contract row for post-write
@@ -566,6 +597,49 @@ function addContractEntry(data) {
         var photoWarning = 'Photo of passport could not be saved: ' + photoResult.error;
         responsePayload.warning = responsePayload.warning ? (responsePayload.warning + ' ' + photoWarning) : photoWarning;
       }
+    }
+
+    // Every contract gets its receipt PDF generated automatically, right
+    // now, using this same submission's own values -- there should never
+    // be a moment where a contract exists with no receipt yet. "Total
+    // price" on the Contract row is the FULL amount the customer paid
+    // (rental + delivery combined), not the rental portion alone -- so
+    // Total Paid on the receipt is that value as-is, and Rental Fee is
+    // back-calculated as total minus delivery, to avoid double-counting
+    // the delivery fee. Staff can open the edit screen's "Edit Receipt"
+    // at any point afterwards to correct the numbers (e.g. an extension)
+    // and regenerate -- see generateReceiptDocument, which replaces this
+    // same row's receipt rather than creating a second one. Never allowed
+    // to block/fail the contract row write itself -- a problem here only
+    // adds a warning.
+    var receiptTotalPaid = Number(data.totalPrice) || 0;
+    var receiptRentalFee = receiptTotalPaid - (Number(deliveryFee) || 0);
+    var receiptMethod = mapPaidByToReceiptMethod(data.paidBy);
+    var receiptResult = generateReceiptDocument({
+      rowNumber: newRow,
+      name: data.name,
+      number: data.number,
+      rentingDateFrom: data.rentingDateFrom,
+      receiptNo: '',
+      receiptDate: Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd'),
+      bikeModel: data.bikeModel,
+      rentalPeriodFrom: data.rentingDateFrom,
+      rentalPeriodTo: data.returnDate,
+      rentalFee: receiptRentalFee,
+      deliveryFee: deliveryFee,
+      otherLabel: '',
+      otherAmount: '',
+      totalPaid: receiptTotalPaid,
+      paymentMethod: receiptMethod.method,
+      otherMethodText: receiptMethod.otherText,
+      receivedBy: 'Miss. Arparatchanee'
+    });
+    if (receiptResult.success) {
+      responsePayload.receiptPdfUrl = receiptResult.pdfUrl;
+      responsePayload.receiptNo = receiptResult.receiptNo;
+    } else {
+      var receiptWarning = 'Receipt could not be generated: ' + receiptResult.error;
+      responsePayload.warning = responsePayload.warning ? (responsePayload.warning + ' ' + receiptWarning) : receiptWarning;
     }
 
     return ContentService
@@ -764,6 +838,27 @@ function bikeNamesMatchForTaxLookup(a, b) {
   return paddedCa.indexOf(paddedCb) !== -1 || paddedCb.indexOf(paddedCa) !== -1;
 }
 
+// ---- Builds the customer-facing bike name shown on contracts/receipts as
+// "Make Model" (e.g. "Yamaha GT3", "Honda Forza"), from the Bike Tax tab's
+// make/model columns -- without doubling up the make if the model column
+// already includes it (e.g. make "Yamaha" + model "Yamaha GT" must stay
+// "Yamaha GT", not become "Yamaha Yamaha GT"). Falls back to whatever bike
+// name was already on the contract if the bike isn't found in the Bike Tax
+// tab, or if it's found but make/model are both blank there. ----
+function buildBikeDisplayName(make, model, fallback) {
+  make = (make || '').toString().trim();
+  model = (model || '').toString().trim();
+  if (!make && !model) return fallback || '';
+  if (!make) return model;
+  if (!model) return make;
+  var makeLower = make.toLowerCase();
+  var modelLower = model.toLowerCase();
+  if (modelLower === makeLower || modelLower.indexOf(makeLower + ' ') === 0) {
+    return model;
+  }
+  return make + ' ' + model;
+}
+
 // ---- Contract status lifecycle step 2 of 2: called from customer intake
 // (the default doPost branch) once a customer's rental has actually been
 // checked in and all the other sheets (customer/income/cash/bikes/deposit)
@@ -896,6 +991,30 @@ function escapeDocReplacement(value) {
   return String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/\$/g, '\\$');
 }
 
+// ---- Hands out the next receipt number in sequence (e.g. "AA-000042"),
+// persisting the counter in Script Properties so it survives across runs
+// and never repeats. Wrapped in a lock since two contracts/edits could in
+// theory be generating receipts at the same moment. Called by
+// generateReceiptDocument whenever no receiptNo was supplied, so both the
+// automatic receipt made at contract creation and any later manual "Edit
+// Receipt" regeneration always get a fresh number without staff having to
+// type one in. ----
+function getNextReceiptNumber() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var last = Number(props.getProperty('LAST_RECEIPT_NUMBER')) || 0;
+    var next = last + 1;
+    props.setProperty('LAST_RECEIPT_NUMBER', String(next));
+    var digits = String(next);
+    while (digits.length < 6) digits = '0' + digits;
+    return 'AA-' + digits;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 // ---- Returns the "AA Scooters Contracts" Drive folder, creating it (once)
 // if it doesn't exist yet. Deliberately does NOT use a hardcoded folder
 // ID -- a hardcoded ID would always point at whichever Google account
@@ -909,14 +1028,27 @@ function getOrCreateContractsFolder() {
   var cachedId = props.getProperty('CONTRACTS_FOLDER_ID');
   if (cachedId) {
     try {
-      return DriveApp.getFolderById(cachedId);
+      var cachedFolder = DriveApp.getFolderById(cachedId);
+      // A trashed folder still resolves fine by ID (it isn't gone until
+      // the trash is emptied) -- but it shouldn't keep being reused, so
+      // fall through to search/create instead of returning it.
+      if (!cachedFolder.isTrashed()) return cachedFolder;
     } catch (e) {
-      // Cached ID no longer resolves (folder deleted/moved) -- fall
-      // through and look it up / recreate it below.
+      // Cached ID no longer resolves (folder permanently deleted/moved) --
+      // fall through and look it up / recreate it below.
     }
   }
+  // getFoldersByName returns trashed folders too -- skip any that are in
+  // the trash so a deleted-but-not-yet-emptied "AA Scooters Contracts"
+  // folder is never silently reused; only create a fresh one if every
+  // match found is trashed.
   var existing = DriveApp.getFoldersByName('AA Scooters Contracts');
-  var folder = existing.hasNext() ? existing.next() : DriveApp.createFolder('AA Scooters Contracts');
+  var folder = null;
+  while (existing.hasNext()) {
+    var candidate = existing.next();
+    if (!candidate.isTrashed()) { folder = candidate; break; }
+  }
+  if (!folder) folder = DriveApp.createFolder('AA Scooters Contracts');
   props.setProperty('CONTRACTS_FOLDER_ID', folder.getId());
   return folder;
 }
@@ -956,6 +1088,12 @@ function findCustomerContractFolder(parentFolder, name, phone) {
   var subfolders = parentFolder.getFolders();
   while (subfolders.hasNext()) {
     var candidate = subfolders.next();
+    // Skip trashed subfolders -- e.g. a customer folder someone deleted
+    // by mistake (or on purpose) shouldn't get silently written back
+    // into just because its name still matches. A new, non-trashed
+    // folder gets created instead (see getOrCreateCustomerContractFolder
+    // below) when every name+phone match found here is trashed.
+    if (candidate.isTrashed()) continue;
     // The name and date never contain " - " themselves in normal use, so
     // splitting on it and taking the FIRST part as the date and the LAST
     // part as the phone number (with everything in between rejoined as
@@ -988,33 +1126,121 @@ function getOrCreateCustomerContractFolder(parentFolder, data) {
   return parentFolder.createFolder(folderName);
 }
 
+// ---- Pulls the Drive file ID out of a Doc/PDF/image share URL, e.g.
+// ".../document/d/<ID>/edit..." or ".../file/d/<ID>/view...". Returns ''
+// if no ID-shaped "/d/<id>" segment is found. ----
+function extractDriveFileIdFromUrl(url) {
+  var m = (url || '').toString().match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+  return m ? m[1] : '';
+}
+
+// ---- Finds the EXACT Drive folder a Contract row's own Doc/PDF/photo/
+// receipt links already point into, by reading whichever of columns
+// R/S/T/U (contractDocUrl/contractPdfUrl/passportPhotoUrl/receiptPdfUrl)
+// is populated and asking Drive for that file's parent folder. This is
+// authoritative -- unlike findCustomerContractFolder's name+phone guess,
+// it can't be thrown off by a phone number typed with different
+// spacing/formatting than whatever's embedded in the folder name, or a
+// name tweaked slightly via editContract since the folder was created.
+// Returns null if none of the four columns has a usable/resolvable link
+// yet (e.g. an older row, or one whose document generation failed), so
+// the caller can fall back to the name+phone match instead. ----
+function getContractRowFolder(sheet, rowNum) {
+  var linkCols = [18, 19, 20, 21]; // R, S, T, U
+  for (var i = 0; i < linkCols.length; i++) {
+    var url = sheet.getRange(rowNum, linkCols[i]).getValue();
+    if (!url) continue;
+    var id = extractDriveFileIdFromUrl(url);
+    if (!id) continue;
+    try {
+      var file = DriveApp.getFileById(id);
+      var parents = file.getParents();
+      while (parents.hasNext()) {
+        var parent = parents.next();
+        if (!parent.isTrashed()) return parent;
+      }
+    } catch (e) {
+      // Stale/broken link on this column -- try the next one.
+    }
+  }
+  return null;
+}
+
 // ---- Saves a photo of the passport image into the SAME per-customer
-// subfolder a contract's Doc/PDF are saved into
-// (getOrCreateCustomerContractFolder), named the same way as the contract
-// itself but with "Photo of Passport" in place of "Contract" -- e.g.
-// "Photo of Passport - Christian Jay Verona - 11-07-2026.jpg" next to
-// "Contract - Christian Jay Verona - 11-07-2026". If data.rowNumber is
-// given, the resulting link is also backfilled onto that Contract row
-// (column T) for later retrieval.
+// subfolder a contract's Doc/PDF are saved into, named the same way as
+// the contract itself but with "Photo of Passport" in place of
+// "Contract" -- e.g. "Photo of Passport - Christian Jay Verona -
+// 11-07-2026.jpg" next to "Contract - Christian Jay Verona -
+// 11-07-2026". If data.rowNumber is given, the resulting link is also
+// backfilled onto that Contract row (column T) for later retrieval.
+//
+// Folder resolution, in order: (1) if this row already has a stored
+// Doc/PDF/photo link, use THAT file's actual parent folder --
+// guaranteed correct, since it's the same folder the contract's own
+// documents are already sitting in; (2) otherwise fall back to the
+// name+phone folder match (creating a new folder only if that also
+// finds nothing) -- needed for a row with no stored links yet (older
+// rows, or a row whose document generation failed).
+//
+// Also refuses to create a second photo for a contract that already has
+// one: if the row's column T is already populated, or a file matching
+// this contract's expected name is already sitting in the resolved
+// folder, this returns { success: false, alreadyExists: true, url }
+// pointing at the existing photo instead of uploading a duplicate.
 //
 // data: { name, number, rentingDateFrom, passportPhotoBase64 (raw
 // base64, no "data:" prefix), passportPhotoMimeType, rowNumber
-// (optional) }. Returns { success, url } or { success: false, error } --
-// never throws, so a caller folding this into a bigger response (like
-// addContractEntry) can just turn a failure into a warning instead of
-// losing the whole save. ----
+// (optional) }. Returns { success, url } or { success: false, error,
+// alreadyExists?, url? } -- never throws, so a caller folding this into
+// a bigger response (like addContractEntry) can just turn a failure
+// into a warning instead of losing the whole save. ----
 function savePassportPhoto(data) {
   try {
     var name = (data.name || '').toString().trim();
     if (!name) throw new Error('No customer name given.');
     if (!data.passportPhotoBase64) throw new Error('No photo data given.');
 
-    var parentFolder = getOrCreateContractsFolder();
-    var folder = getOrCreateCustomerContractFolder(parentFolder, data);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Contract');
+    var rowNum = data.rowNumber ? Math.round(Number(data.rowNumber)) : 0;
+    var rowValid = !!(sheet && rowNum && rowNum >= (HEADER_ROWS + 1) && rowNum <= sheet.getLastRow());
 
     var dateStr = data.rentingDateFrom
       ? formatIsoDateToDMY(data.rentingDateFrom).replace(/\//g, '-')
-      : Utilities.formatDate(new Date(), SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'dd-MM-yyyy');
+      : Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'dd-MM-yyyy');
+
+    var folder = rowValid ? getContractRowFolder(sheet, rowNum) : null;
+    if (!folder) {
+      var parentFolder = getOrCreateContractsFolder();
+      folder = getOrCreateCustomerContractFolder(parentFolder, data);
+    }
+
+    // "Already exists" is scoped to THIS contract specifically -- same
+    // customer folder, but only a photo dated to THIS row's own rental
+    // start date counts as a duplicate. The same customer can come back
+    // months later (new passport, new contract) and get their own,
+    // separate photo of passport alongside the earlier one in the same
+    // folder; only re-uploading for the SAME dated contract is blocked.
+    //
+    // Deliberately does NOT trust column T (passportPhotoUrl) blindly --
+    // an older/incorrect backfill (e.g. from findPassportPhotoEntry's
+    // fuzzy prefix search matching a DIFFERENT dated file before this
+    // fix) could otherwise wrongly block a legitimate new upload. The
+    // filename scan below is the single source of truth; if it finds no
+    // match, upload proceeds and column T gets corrected to the right
+    // file regardless of whatever was stored there before.
+    var expectedPrefix = 'Photo of Passport - ' + name + ' - ' + dateStr;
+    var existingFiles = folder.getFiles();
+    while (existingFiles.hasNext()) {
+      var ef = existingFiles.next();
+      if (ef.getName().indexOf(expectedPrefix) === 0) {
+        if (rowValid) {
+          try { sheet.getRange(rowNum, 20).setValue(ef.getUrl()); } catch (e2) { /* ignore */ }
+        }
+        return { success: false, alreadyExists: true, url: ef.getUrl(),
+          error: 'A photo of passport dated ' + dateStr + ' is already on file for this contract.' };
+      }
+    }
 
     var mimeType = (data.passportPhotoMimeType || 'image/jpeg').toLowerCase();
     var ext = '.jpg';
@@ -1023,9 +1249,8 @@ function savePassportPhoto(data) {
     else if (mimeType.indexOf('heic') !== -1) ext = '.heic';
     else if (mimeType.indexOf('gif') !== -1) ext = '.gif';
 
-    var baseName = 'Photo of Passport - ' + name + ' - ' + dateStr;
     var bytes = Utilities.base64Decode(data.passportPhotoBase64);
-    var blob = Utilities.newBlob(bytes, mimeType, baseName + ext);
+    var blob = Utilities.newBlob(bytes, mimeType, expectedPrefix + ext);
     var file = folder.createFile(blob);
 
     // Same view-only public-link sharing as the generated contract Doc/PDF,
@@ -1033,16 +1258,9 @@ function savePassportPhoto(data) {
     // shouldn't hit a "you need access" wall.
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
-    if (data.rowNumber) {
+    if (rowValid) {
       try {
-        var ss = SpreadsheetApp.getActiveSpreadsheet();
-        var sheet = ss.getSheetByName('Contract');
-        if (sheet) {
-          var rowNum = Math.round(Number(data.rowNumber));
-          if (rowNum && rowNum >= (HEADER_ROWS + 1) && rowNum <= sheet.getLastRow()) {
-            sheet.getRange(rowNum, 20).setValue(file.getUrl()); // column T
-          }
-        }
+        sheet.getRange(rowNum, 20).setValue(file.getUrl()); // column T
       } catch (backfillErr) {
         Logger.log('Could not store photo-of-passport link on the row: ' + backfillErr.message);
       }
@@ -1054,18 +1272,197 @@ function savePassportPhoto(data) {
   }
 }
 
-// ---- action:'uploadPassportPhoto' -- not currently called from any page
-// (the Add-contract form now bundles the photo into addContract instead,
-// so it's saved atomically with the folder/contract; see addContractEntry
-// above). Left in place as a standalone entry point in case a future page
-// needs to attach/replace a photo on an existing contract row without a
-// full editContract call. data: same shape savePassportPhoto expects,
-// plus rowNumber so the link gets backfilled onto that exact row. ----
+// ---- action:'uploadPassportPhoto' -- used by the Search tab's edit
+// modal, to attach/replace a photo of the passport on a contract that
+// already exists (the Add-contract form instead bundles its own photo
+// straight into addContract; see addContractEntry above). data: same
+// shape savePassportPhoto expects, plus rowNumber so the folder is
+// resolved from that exact row's own stored links and the result link
+// gets backfilled onto it. ----
 function uploadPassportPhotoEntry(data) {
   var result = savePassportPhoto(data);
+  if (result.success) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, url: result.url }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
   return ContentService
-    .createTextOutput(JSON.stringify(result.success ? { success: true, url: result.url } : { success: false, error: result.error }))
+    .createTextOutput(JSON.stringify({
+      success: false,
+      alreadyExists: !!result.alreadyExists,
+      url: result.url || '',
+      error: result.error
+    }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ---- action:'readPassportWithAI' -- the "Fill from Passport (AI)" button.
+// Sends the photo to Claude (vision) and asks for name / nationality /
+// passport number back as JSON so the intake form can be pre-filled
+// instead of typed by hand. Nothing here is saved anywhere -- the photo is
+// read, the fields are handed back to the browser, and staff review them
+// before "Create contract" actually writes the row. Requires a Script
+// Property named ANTHROPIC_API_KEY (Apps Script editor > Project Settings
+// > Script Properties) -- set once there, never stored in this file. ----
+function readPassportWithAIEntry(data) {
+  try {
+    var base64 = (data.imageBase64 || '').toString();
+    if (!base64) throw new Error('No photo was sent.');
+    var mimeType = (data.imageMimeType || 'image/jpeg').toString();
+
+    var fields = callClaudeForPassportFields(base64, mimeType);
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, fields: fields }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function callClaudeForPassportFields(base64, mimeType) {
+  var props = PropertiesService.getScriptProperties();
+  var apiKey = props.getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) {
+    throw new Error('No ANTHROPIC_API_KEY set in Script Properties (Project Settings in the Apps Script editor).');
+  }
+
+  var prompt = 'You are reading the personal-details page of a passport photo for a ' +
+    'vehicle rental shop\'s contract intake form. Return ONLY a single JSON object ' +
+    '(no markdown, no code fence, no extra text) with exactly these keys: ' +
+    '"name" (the holder\'s full name in normal Title Case, given name(s) then ' +
+    'surname -- not the MRZ format with "<" characters), "nationality" (the ' +
+    'issuing country\'s common English name, e.g. "United States", "United ' +
+    'Kingdom", "Thailand" -- not a 3-letter code), and "passport" (the passport ' +
+    'number only, no spaces). If a field cannot be read with confidence, use an ' +
+    'empty string for it rather than guessing.';
+
+  var payload = {
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 300,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  };
+
+  var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+
+  var code = resp.getResponseCode();
+  var raw = resp.getContentText();
+  var json;
+  try { json = JSON.parse(raw); } catch (e) { json = null; }
+
+  if (code < 200 || code >= 300 || !json) {
+    var apiErr = (json && json.error && json.error.message) || raw;
+    throw new Error('Claude API error (HTTP ' + code + '): ' + apiErr);
+  }
+
+  var text = (json.content && json.content[0] && json.content[0].text) || '';
+  var start = text.indexOf('{');
+  var end = text.lastIndexOf('}');
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error('Could not find field data in the response.');
+  }
+  var fields;
+  try {
+    fields = JSON.parse(text.slice(start, end + 1));
+  } catch (e) {
+    throw new Error('Could not parse the fields Claude returned.');
+  }
+
+  return {
+    name: (fields.name || '').toString().trim(),
+    nationality: (fields.nationality || '').toString().trim(),
+    passport: (fields.passport || '').toString().trim()
+  };
+}
+
+// ---- action:'readOdometerWithAI' -- the parts.html "read the odometer
+// photo" flow. Same idea as readPassportWithAI above: sends the (already
+// cropped) photo to Claude and asks for just the kilometers reading back.
+// Replaces the old client-side Tesseract pass, which struggled with
+// needle dials and glare. Reuses the same ANTHROPIC_API_KEY script
+// property -- no separate setup needed. ----
+function readOdometerWithAIEntry(data) {
+  try {
+    var base64 = (data.imageBase64 || '').toString();
+    if (!base64) throw new Error('No photo was sent.');
+    var mimeType = (data.imageMimeType || 'image/jpeg').toString();
+
+    var km = callClaudeForOdometerReading(base64, mimeType);
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, km: km }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function callClaudeForOdometerReading(base64, mimeType) {
+  var props = PropertiesService.getScriptProperties();
+  var apiKey = props.getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) {
+    throw new Error('No ANTHROPIC_API_KEY set in Script Properties (Project Settings in the Apps Script editor).');
+  }
+
+  var prompt = 'This is a cropped photo of a scooter\'s speedometer/odometer, showing ' +
+    'the total distance reading (not the trip meter, if both are visible). Return ' +
+    'ONLY the number of kilometers as digits, nothing else -- no units, no commas, ' +
+    'no words, no markdown. If the reading cannot be made out with confidence, ' +
+    'return an empty response instead of guessing.';
+
+  var payload = {
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 30,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  };
+
+  var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+
+  var code = resp.getResponseCode();
+  var raw = resp.getContentText();
+  var json;
+  try { json = JSON.parse(raw); } catch (e) { json = null; }
+
+  if (code < 200 || code >= 300 || !json) {
+    var apiErr = (json && json.error && json.error.message) || raw;
+    throw new Error('Claude API error (HTTP ' + code + '): ' + apiErr);
+  }
+
+  var text = (json.content && json.content[0] && json.content[0].text) || '';
+  var groups = (text.match(/\d+/g) || []).sort(function(a, b) { return b.length - a.length; });
+  return groups.length ? groups[0] : '';
 }
 
 // ---- action:'findContractDocument' -- the "View Contract PDF" / "View
@@ -1142,6 +1539,65 @@ function findContractDocumentEntry(data) {
 
     return ContentService
       .createTextOutput(JSON.stringify({ success: true, docUrl: docUrl, pdfUrl: pdfUrl }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+/// ---- action:'regenerateContract' -- the "View Contract Google Doc"/"View
+// Contract PDF" buttons' fallback when findContractDocumentEntry above
+// comes back empty (no contract file exists anywhere for this row, not
+// just an unstored link). Rebuilds the contract Doc + PDF from this row's
+// OWN current fields (name, bike, dates, price, deposit, delivery fee,
+// etc. -- passed up from the Search tab's already-loaded record, same as
+// what's shown/edited on the Edit-contract form), the exact same way
+// generateContractDocument is called when a contract is first created.
+// The new links are backfilled onto columns R/S so this only ever needs
+// to run once per row. ----
+function regenerateContractDocumentEntry(data) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Contract');
+    if (!sheet) throw new Error('Sheet named "Contract" not found in this spreadsheet.');
+
+    var rowNum = Math.round(Number(data.rowNumber));
+    if (!rowNum || rowNum < (HEADER_ROWS + 1)) throw new Error('Invalid contract row number.');
+    if (rowNum > sheet.getLastRow()) throw new Error('That contract row no longer exists on the sheet.');
+
+    var bikeModel = stripBikeNameBrackets(data.bikeModel);
+    var depositMethod = (data.deposit || '').toString().trim();
+    var depositNeedsAmount = depositMethod !== '' && depositMethod.toLowerCase() !== 'passport';
+    var depositAmount = depositNeedsAmount ? (data.depositAmount || '') : '';
+    var deliveryFee = data.deliveryFeeApplies ? (data.deliveryFee || '') : '';
+
+    var docData = {
+      name: data.name || '',
+      passport: data.passport || '',
+      nationality: data.nationality || '',
+      number: data.number || '',
+      deliverToHotel: data.deliverToHotel || '',
+      bikeModel: bikeModel || '',
+      rentingDateFrom: data.rentingDateFrom,
+      returnDate: data.returnDate,
+      returnTime: data.returnTime || '',
+      totalPrice: data.totalPrice || ''
+    };
+
+    var docResult = generateContractDocument(docData, depositMethod, depositAmount, deliveryFee);
+    if (!docResult.success) throw new Error(docResult.error);
+
+    try {
+      sheet.getRange(rowNum, 18).setValue(docResult.docUrl);
+      sheet.getRange(rowNum, 19).setValue(docResult.pdfUrl);
+    } catch (linkErr) {
+      Logger.log('Could not store contract doc/pdf links on the row: ' + linkErr.message);
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: true, docUrl: docResult.docUrl, pdfUrl: docResult.pdfUrl }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService
@@ -1435,6 +1891,12 @@ function generateContractDocument(data, depositMethod, depositAmount, deliveryFe
       cc = bikeRow.cc || '';
       plate = bikeRow.plate || '';
     }
+    // Show "Make Model" (e.g. "Yamaha GT3") on the document itself, rather
+    // than the internal bike name used to select it on the intake form
+    // (which often has a color/number in parens, e.g. "Yamaha GT (Black
+    // 2)") -- falls back to that internal name if this bike isn't in the
+    // Bike Tax tab, or has no make/model filled in.
+    var bikeDisplayName = buildBikeDisplayName(bikeRow && bikeRow.make, bikeRow && bikeRow.model, bikeModel);
 
     // Only one time field exists on the contract intake form (Return
     // time) -- Rental Start and Return must show the same time on the
@@ -1461,7 +1923,7 @@ function generateContractDocument(data, depositMethod, depositAmount, deliveryFe
       '<<NATIONALITY>>': data.nationality || '',
       '<<PHONE>>': data.number || '',
       '<<DELIVERY>>': data.deliverToHotel || '',
-      '<<BIKE>>': bikeModel,
+      '<<BIKE>>': bikeDisplayName,
       '<<PLATE>>': plate,
       '<<CC>>': cc,
       '<<KEY_TYPE>>': keyType,
@@ -1473,7 +1935,12 @@ function generateContractDocument(data, depositMethod, depositAmount, deliveryFe
       '<<DELIVERY_FEE>>': deliveryFeeDisplay,
       '<<TOTAL_FEE>>': totalFeeDisplay,
       '<<DEPOSIT_METHOD>>': isPassportDeposit ? 'Passport' : (depositMethod || ''),
-      '<<DEPOSIT_AMOUNT>>': depositAmountDisplay
+      '<<DEPOSIT_AMOUNT>>': depositAmountDisplay,
+      // Signature-block date -- the day this contract document is
+      // actually generated (today), NOT the rental start date. Fills the
+      // "Date:" line under both the Renter's and AA Scooter Rental's
+      // signatures on the template.
+      '<<DATE>>': Utilities.formatDate(new Date(), SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone(), 'dd/MM/yyyy')
     };
 
     var parentFolder = getOrCreateContractsFolder();
@@ -1520,6 +1987,323 @@ function generateContractDocument(data, depositMethod, depositAmount, deliveryFe
   } catch (err) {
     return { success: false, error: err.message };
   }
+}
+
+// ---- Returns the ID of the master receipt template Doc, building a
+// basic fallback (once) inside the Contracts folder if nobody has
+// manually supplied a real one yet -- same "look up by name first,
+// always prefer a real uploaded template over anything auto-built or
+// cached" reasoning as getOrCreateContractTemplateDoc.
+//
+// To use your own design (recommended over the auto-built fallback):
+// upload it into the SAME "AA Scooters Contracts" folder the contract
+// template lives in (NOT inside any customer subfolder), convert it to a
+// Google Doc, and name it EXACTLY "AA Scooter Rental Payment Receipt -
+// MASTER TEMPLATE (do not edit fields)". Then type these <<TOKEN>>
+// placeholders in place of each blank field, exactly as spelled here:
+// <<RECEIPT_NO>>, <<RECEIPT_DATE>>, <<FULL_NAME>>, <<BIKE>>, <<CC>>,
+// <<RENTAL_PERIOD>>, <<RENTAL_FEE>>, <<DELIVERY_FEE>>, <<OTHER_LABEL>>,
+// <<OTHER_AMOUNT>>, <<TOTAL_PAID>>, <<CASH_BOX>>, <<SCAN_BOX>>,
+// <<WISE_BOX>>, <<REVOLUT_BOX>>, <<OTHER_BOX>>, <<OTHER_METHOD_TEXT>>,
+// <<RECEIVED_BY>>. ----
+function getOrCreateReceiptTemplateDoc(folder) {
+  var props = PropertiesService.getScriptProperties();
+  var name = 'AA Scooter Rental Payment Receipt - MASTER TEMPLATE (do not edit fields)';
+
+  var existingFiles = folder.getFilesByName(name);
+  if (existingFiles.hasNext()) {
+    var found = existingFiles.next();
+    var foundId = found.getId();
+    if (found.getMimeType() !== MimeType.GOOGLE_DOCS) {
+      foundId = convertToGoogleDoc(foundId, name, folder);
+      found.setName(name + ' (original upload, converted below)');
+    }
+    props.setProperty('RECEIPT_TEMPLATE_DOC_ID', foundId);
+    return foundId;
+  }
+
+  var cachedId = props.getProperty('RECEIPT_TEMPLATE_DOC_ID');
+  if (cachedId) {
+    try {
+      DriveApp.getFileById(cachedId);
+      return cachedId;
+    } catch (e) {
+      // Cached ID no longer resolves -- fall through and build one below.
+    }
+  }
+
+  var builtId = buildReceiptTemplateDoc(folder, name);
+  props.setProperty('RECEIPT_TEMPLATE_DOC_ID', builtId);
+  return builtId;
+}
+
+// ---- Bare-bones fallback receipt template, built entirely via
+// DocumentApp -- only ever used until a real uploaded design takes its
+// place (see getOrCreateReceiptTemplateDoc above). Mirrors the AA Scooter
+// Rental Payment Receipt layout, with the same <<TOKEN>> placeholders a
+// manually-uploaded template needs. ----
+function buildReceiptTemplateDoc(folder, name) {
+  var doc = DocumentApp.create(name);
+  var id = doc.getId();
+  var file = DriveApp.getFileById(id);
+  folder.addFile(file);
+  DriveApp.getRootFolder().removeFile(file);
+
+  var body = doc.getBody();
+  body.clear();
+
+  var title = body.appendParagraph('AA SCOOTER RENTAL');
+  title.setHeading(DocumentApp.ParagraphHeading.TITLE);
+  title.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+
+  var sub = body.appendParagraph('Payment Receipt');
+  sub.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  sub.editAsText().setBold(true);
+
+  var addr = body.appendParagraph('150/33 Chanyayon Village, Suthep, Chiang Mai 50200, Thailand  |  +66 86 654 3609');
+  addr.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  addr.editAsText().setFontSize(9);
+
+  body.appendParagraph('');
+  body.appendTable([['Receipt No.: <<RECEIPT_NO>>', 'Date: <<RECEIPT_DATE>>']]);
+
+  body.appendParagraph('');
+  body.appendParagraph('RECEIVED FROM').editAsText().setBold(true);
+  body.appendParagraph('Name: <<FULL_NAME>>');
+
+  body.appendParagraph('');
+  body.appendParagraph('SCOOTER DETAILS').editAsText().setBold(true);
+  body.appendParagraph('Scooter Type (e.g. Aerox, Nmax): <<BIKE>>');
+  body.appendTable([['Engine Size (CC): <<CC>>', 'Rental Period: <<RENTAL_PERIOD>>']]);
+
+  body.appendParagraph('');
+  body.appendParagraph('PAYMENT DETAILS').editAsText().setBold(true);
+  var payTable = body.appendTable([
+    ['Description', 'Amount (THB)'],
+    ['Rental Fee', '<<RENTAL_FEE>>'],
+    ['Delivery Fee (if applicable)', '<<DELIVERY_FEE>>'],
+    ['Other: <<OTHER_LABEL>>', '<<OTHER_AMOUNT>>'],
+    ['Total Amount Paid', '<<TOTAL_PAID>>']
+  ]);
+  payTable.getRow(0).getCell(0).editAsText().setBold(true);
+  payTable.getRow(0).getCell(1).editAsText().setBold(true);
+  payTable.getRow(4).getCell(0).editAsText().setBold(true);
+
+  body.appendParagraph('');
+  body.appendParagraph('Payment Method: <<CASH_BOX>> Cash   <<SCAN_BOX>> Thai QR Scan   <<WISE_BOX>> Wise   <<REVOLUT_BOX>> Revolut   <<OTHER_BOX>> Other: <<OTHER_METHOD_TEXT>>');
+
+  body.appendParagraph('');
+  body.appendParagraph('RECEIVED BY').editAsText().setBold(true);
+  body.appendParagraph('Company: AA Scooter Rental');
+  body.appendParagraph('Received by: <<RECEIVED_BY>>');
+  body.appendParagraph('Signature: ');
+
+  body.appendParagraph('');
+  var thanks = body.appendParagraph('Thank you for choosing AA Scooter Rental!\nWe appreciate your support and wish you a safe and enjoyable ride.');
+  thanks.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  thanks.editAsText().setBold(true);
+
+  doc.saveAndClose();
+  return id;
+}
+
+// ---- Maps the contract's own "Paid by" field (cash/scan/wise/revolut,
+// or occasionally older free text) onto the receipt's payment-method
+// tokens -- same mapping contract.html's mapPaidByToMethod does
+// client-side, kept in sync here so the automatic receipt generated at
+// contract-creation time (no client-side form involved) checks the same
+// box a person editing the receipt afterwards would see pre-selected. ----
+function mapPaidByToReceiptMethod(paidBy) {
+  var known = { cash: 1, scan: 1, wise: 1, revolut: 1 };
+  var lower = (paidBy || '').toString().trim().toLowerCase();
+  if (known[lower]) return { method: lower, otherText: '' };
+  if (lower) return { method: 'other', otherText: paidBy };
+  return { method: 'cash', otherText: '' };
+}
+
+// ---- Fills the master receipt template with one contract's payment
+// details and saves a PDF-only export into the SAME per-customer folder
+// the contract's own Doc/PDF/photo already live in -- resolved from the
+// Contract row's own stored links (getContractRowFolder), exactly like
+// the passport-photo upload fix, so it can never end up creating a
+// different/duplicate folder. Falls back to the name+phone match
+// (creating a new folder only as a last resort) if the row has no stored
+// links yet.
+//
+// Exactly one receipt exists per contract, the same way there's exactly
+// one contract Doc/PDF per contract: the filled Google Doc is only ever
+// an intermediate step (DocumentApp needs a real Doc to run
+// replaceText/PDF-export against) and gets trashed immediately after the
+// PDF is exported, so nothing but the PDF is left behind in the folder.
+// If this row already has a receipt on file (column U), that OLD PDF is
+// trashed first and the new one takes its place -- "editing" a receipt
+// (e.g. to add an extension's extra days/fee) always means regenerate
+// and replace, never a second file alongside the first. The new link is
+// backfilled onto column U here directly.
+//
+// data: { rowNumber, name, number, rentingDateFrom (yyyy-MM-dd, the
+// CONTRACT's own start date -- only used if a brand-new folder ends up
+// needing to be created as a last resort), receiptNo, receiptDate
+// (yyyy-MM-dd), bikeModel, cc (optional override; looked up from the
+// Bike Tax tab if omitted), rentalPeriodFrom/rentalPeriodTo
+// (yyyy-MM-dd), rentalFee, deliveryFee, otherLabel, otherAmount,
+// totalPaid, paymentMethod ('cash'|'scan'|'wise'|'revolut'|'other'),
+// otherMethodText, receivedBy }. Returns { success, pdfUrl } or
+// { success: false, error } -- never throws, so addContractEntry can
+// fold a failure into a warning instead of losing the contract row. ----
+function generateReceiptDocument(data) {
+  try {
+    var name = (data.name || '').toString().trim();
+    if (!name) throw new Error('No customer name given.');
+
+    // A receipt number is required every time a receipt is (re)generated --
+    // if the caller didn't supply one (the normal case; the edit form
+    // always leaves it blank for staff), auto-assign the next one in
+    // sequence rather than leaving it empty.
+    var receiptNo = (data.receiptNo || '').toString().trim();
+    if (!receiptNo) receiptNo = getNextReceiptNumber();
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('Contract');
+    var rowNum = data.rowNumber ? Math.round(Number(data.rowNumber)) : 0;
+    var rowValid = !!(sheet && rowNum && rowNum >= (HEADER_ROWS + 1) && rowNum <= sheet.getLastRow());
+
+    var folder = rowValid ? getContractRowFolder(sheet, rowNum) : null;
+    if (!folder) {
+      var parentFolder = getOrCreateContractsFolder();
+      folder = getOrCreateCustomerContractFolder(parentFolder, data);
+    }
+    var templateParentFolder = getOrCreateContractsFolder();
+    var templateId = getOrCreateReceiptTemplateDoc(templateParentFolder);
+
+    var bikeModel = (data.bikeModel || '').toString().trim();
+    var cc = (data.cc || '').toString().trim();
+    // Looked up regardless of whether cc was already supplied, since this
+    // also resolves the "Make Model" display name (e.g. "Yamaha GT3") shown
+    // on the receipt in place of the internal bike name.
+    var categoryRows = getBikeTaxCategories();
+    var bikeRow = categoryRows.filter(function(r) {
+      return bikeNamesMatchForTaxLookup(r.bike, bikeModel);
+    })[0];
+    if (!cc && bikeRow) cc = bikeRow.cc || '';
+    var bikeDisplayName = buildBikeDisplayName(bikeRow && bikeRow.make, bikeRow && bikeRow.model, bikeModel);
+
+    var periodFrom = formatIsoDateToDMY(data.rentalPeriodFrom);
+    var periodTo = formatIsoDateToDMY(data.rentalPeriodTo);
+    var rentalPeriod = (periodFrom && periodTo) ? (periodFrom + ' - ' + periodTo) : (periodFrom || periodTo || '');
+
+    function moneyDisplay(v) {
+      return (v !== '' && v !== undefined && v !== null && !isNaN(Number(v)))
+        ? Number(v).toLocaleString('en-US')
+        : '';
+    }
+
+    var method = (data.paymentMethod || '').toString().trim().toLowerCase();
+    function box(key) { return method === key ? '☑' : '☐'; }
+
+    var tokens = {
+      '<<RECEIPT_NO>>': receiptNo,
+      '<<RECEIPT_DATE>>': formatIsoDateToDMY(data.receiptDate),
+      '<<FULL_NAME>>': name,
+      '<<BIKE>>': bikeDisplayName,
+      '<<CC>>': cc,
+      '<<RENTAL_PERIOD>>': rentalPeriod,
+      '<<RENTAL_FEE>>': moneyDisplay(data.rentalFee),
+      '<<DELIVERY_FEE>>': moneyDisplay(data.deliveryFee),
+      '<<OTHER_LABEL>>': data.otherLabel || '',
+      '<<OTHER_AMOUNT>>': moneyDisplay(data.otherAmount),
+      '<<TOTAL_PAID>>': moneyDisplay(data.totalPaid),
+      '<<CASH_BOX>>': box('cash'),
+      '<<SCAN_BOX>>': box('scan'),
+      '<<WISE_BOX>>': box('wise'),
+      '<<REVOLUT_BOX>>': box('revolut'),
+      '<<OTHER_BOX>>': box('other'),
+      '<<OTHER_METHOD_TEXT>>': method === 'other' ? (data.otherMethodText || '') : '',
+      '<<RECEIVED_BY>>': data.receivedBy || ''
+    };
+
+    var receiptDateStr = data.receiptDate
+      ? formatIsoDateToDMY(data.receiptDate).replace(/\//g, '-')
+      : Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'dd-MM-yyyy');
+    var fileName = 'Receipt - ' + name + ' - ' + receiptDateStr;
+
+    // Replacing an existing receipt: trash the old PDF first so exactly
+    // one ever exists for this contract. Wrapped so a stale/already-gone
+    // link (e.g. someone already deleted it by hand) never blocks
+    // generating the new one.
+    if (rowValid) {
+      var existingReceiptUrl = sheet.getRange(rowNum, 21).getValue();
+      if (existingReceiptUrl) {
+        try {
+          var oldId = extractDriveFileIdFromUrl(existingReceiptUrl);
+          if (oldId) DriveApp.getFileById(oldId).setTrashed(true);
+        } catch (trashErr) {
+          Logger.log('Could not trash the previous receipt PDF: ' + trashErr.message);
+        }
+      }
+    }
+
+    // Belt-and-braces: even after trashing above, avoid ever colliding
+    // with a same-named file (e.g. the trash step silently failed).
+    var finalFileName = fileName;
+    var suffix = 2;
+    while (folder.getFilesByName(finalFileName).hasNext()) {
+      finalFileName = fileName + ' (' + suffix + ')';
+      suffix++;
+    }
+
+    var templateFile = DriveApp.getFileById(templateId);
+    var copyFile = templateFile.makeCopy(finalFileName, folder);
+
+    var doc = DocumentApp.openById(copyFile.getId());
+    var body = doc.getBody();
+    Object.keys(tokens).forEach(function(token) {
+      body.replaceText(token, escapeDocReplacement(tokens[token]));
+    });
+    doc.saveAndClose();
+
+    var pdfBlob = DriveApp.getFileById(copyFile.getId()).getAs(MimeType.PDF);
+    pdfBlob.setName(finalFileName + '.pdf');
+    var pdfFile = folder.createFile(pdfBlob);
+    pdfFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+    // The filled Google Doc was only ever needed to produce the PDF --
+    // this is a PDF-only artifact, so the intermediate Doc copy is
+    // trashed immediately rather than left sitting in the folder.
+    try {
+      DriveApp.getFileById(copyFile.getId()).setTrashed(true);
+    } catch (cleanupErr) {
+      Logger.log('Could not remove the intermediate receipt Doc copy: ' + cleanupErr.message);
+    }
+
+    if (rowValid) {
+      try {
+        sheet.getRange(rowNum, 21).setValue(pdfFile.getUrl()); // column U
+      } catch (backfillErr) {
+        Logger.log('Could not store the receipt PDF link on the row: ' + backfillErr.message);
+      }
+    }
+
+    return {
+      success: true,
+      pdfUrl: pdfFile.getUrl(),
+      receiptNo: receiptNo
+    };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ---- action:'generateReceipt' -- Contract page, Search tab, edit
+// modal's "Edit Receipt" button (and the automatic first generation
+// bundled into addContractEntry). See generateReceiptDocument above for
+// the folder resolution, token list, and the trash-and-replace behavior
+// that keeps exactly one receipt per contract. ----
+function generateReceiptEntry(data) {
+  var result = generateReceiptDocument(data);
+  return ContentService
+    .createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // Converts a yyyy-MM-dd string (what <input type="date"> sends) into
@@ -2343,6 +3127,10 @@ function markBikeReturned(data) {
     verifyCell('customer', rowNumber, CUSTOMER_RETURN_DATE_COL, dateValue, 'return date');
     verifyCell('customer', rowNumber, CUSTOMER_SITUATION_COL, 'Returned', 'situation');
 
+    // Keeps the shared bike-returns calendar in sync -- removes this
+    // row's calendar event now that the bike is back.
+    syncCalendarForCustomerRow(rowNumber);
+
     // Once this bike is marked Returned here, the matching Contract row
     // (found by name + bike, currently "Rented") should flip to "Returned"
     // too -- completing the Pending -> Rented -> Returned lifecycle.
@@ -2364,6 +3152,93 @@ function markBikeReturned(data) {
     if (verification.problems.length) warnings.push(verification.problems.join(' '));
     if (contractStatusWarning) warnings.push(contractStatusWarning);
     if (warnings.length) responsePayload.warning = warnings.join(' ');
+
+    return ContentService
+      .createTextOutput(JSON.stringify(responsePayload))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ---- Update one row in the customer tab: called from the "Adjust Pickup"
+// control on the Bikes Status page. Lets staff record the actual agreed
+// pickup DATE and TIME on an active booking -- e.g. the customer is
+// returning a day early, or intake's date/time was just a placeholder.
+//
+// Return TIME (column J) is written directly, same as before. Return DATE
+// is deliberately NOT written to column I (the "due back" date that
+// drives the overdue badge, the extend-day math, etc. elsewhere in the
+// app) -- instead it goes to a separate column S, "confirmedReturnDate".
+// syncCalendarForCustomerRow() below prefers that column for the calendar
+// event's day when it's set, but every other due-date consumer in the app
+// keeps reading column I untouched. This is intentional: this control is
+// scoped to "fix what the calendar shows", not "change the booking's due
+// date". ----
+function updateReturnPickup(data) {
+  try {
+    var rowNumber = parseInt(data.rowNumber, 10);
+    if (!rowNumber || rowNumber < 2) {
+      throw new Error('Invalid row number.');
+    }
+    var m = String(data.returnTime || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) {
+      throw new Error('Return time must be in HH:mm format.');
+    }
+    var hh = parseInt(m[1], 10), mm = parseInt(m[2], 10);
+    if (hh < 0 || hh > 23 || mm < 0 || mm > 59) {
+      throw new Error('Return time is out of range.');
+    }
+    var dm = String(data.returnDate || '').trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (!dm) {
+      throw new Error('Return date must be in yyyy-MM-dd format.');
+    }
+    var yyyy = parseInt(dm[1], 10), mo = parseInt(dm[2], 10), dd = parseInt(dm[3], 10);
+    var dateValue = new Date(yyyy, mo - 1, dd);
+    if (dateValue.getFullYear() !== yyyy || dateValue.getMonth() !== mo - 1 || dateValue.getDate() !== dd) {
+      throw new Error('Return date is not a valid calendar date.');
+    }
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('customer');
+    if (!sheet) {
+      throw new Error('Sheet named "customer" not found in this spreadsheet.');
+    }
+
+    var CUSTOMER_RETURN_TIME_COL = 10;      // J: Return time
+    var CUSTOMER_TIME_CONFIRMED_COL = 18;   // R: timeConfirmed
+    var CUSTOMER_CONFIRMED_DATE_COL = 19;   // S: confirmedReturnDate (calendar-only override)
+
+    // Same time-only epoch (Dec 30 1899) Sheets itself uses internally for
+    // a cell formatted as a time -- writing a real Date here (rather than
+    // a plain string) means it reads back as a proper time value exactly
+    // like every other return-time cell, regardless of locale.
+    var timeValue = new Date(1899, 11, 30, hh, mm, 0);
+    var timeCell = sheet.getRange(rowNumber, CUSTOMER_RETURN_TIME_COL);
+    timeCell.setValue(timeValue);
+    timeCell.setFontColor('#000000');
+
+    sheet.getRange(rowNumber, CUSTOMER_CONFIRMED_DATE_COL).setValue(dateValue);
+
+    // Marks this as an actually-agreed pickup (not just intake's
+    // placeholder date/time) -- syncCalendarForCustomerRow() below colors
+    // the event green and marks it confirmed because of this flag.
+    sheet.getRange(rowNumber, CUSTOMER_TIME_CONFIRMED_COL).setValue(true);
+
+    verifyCell('customer', rowNumber, CUSTOMER_RETURN_TIME_COL, timeValue, 'edited return time');
+    verifyCell('customer', rowNumber, CUSTOMER_CONFIRMED_DATE_COL, dateValue, 'confirmed pickup date');
+
+    // Keeps the shared bike-returns calendar in sync -- moves this row's
+    // calendar event to the newly agreed pickup date/time and colors it
+    // green. The underlying due-date column (I) is untouched.
+    syncCalendarForCustomerRow(rowNumber);
+
+    var responsePayload = { success: true };
+    var verification = runWriteVerification(ss);
+    if (verification.problems.length) responsePayload.warning = verification.problems.join(' ');
 
     return ContentService
       .createTextOutput(JSON.stringify(responsePayload))
@@ -2414,6 +3289,8 @@ function extendBikeRow(data) {
     var CUSTOMER_RETURN_DATE_COL = 9;   // I: Return date
     var CUSTOMER_TOTAL_PRICE_COL = 12;  // L: total price
     var CUSTOMER_PAIDBY_COL = 13;       // M: paid by
+    var CUSTOMER_TIME_CONFIRMED_COL = 18;  // R: timeConfirmed
+    var CUSTOMER_CONFIRMED_DATE_COL = 19;  // S: confirmedReturnDate
 
     var dateCell = sheet.getRange(rowNumber, CUSTOMER_RETURN_DATE_COL);
     var currentDateValue = dateCell.getValue();
@@ -2429,6 +3306,14 @@ function extendBikeRow(data) {
     currentDate.setDate(currentDate.getDate() + daysToExtend);
     dateCell.setValue(currentDate);
 
+    // The return date just moved, so any previously agreed pickup
+    // date/time no longer necessarily applies to this new due date --
+    // clear the confirmed flag (and the stale confirmed-date override, if
+    // any) so the calendar event goes back to "not yet confirmed" (neutral
+    // color) until staff use Adjust Pickup to agree a new one.
+    sheet.getRange(rowNumber, CUSTOMER_TIME_CONFIRMED_COL).setValue(false);
+    sheet.getRange(rowNumber, CUSTOMER_CONFIRMED_DATE_COL).setValue('');
+
     var priceCell = sheet.getRange(rowNumber, CUSTOMER_TOTAL_PRICE_COL);
     var currentPrice = Number(priceCell.getValue()) || 0;
     priceCell.setFormula('=' + currentPrice + '+' + amountPaid);
@@ -2442,6 +3327,10 @@ function extendBikeRow(data) {
     verifyCell('customer', rowNumber, CUSTOMER_RETURN_DATE_COL, currentDate, 'extended return date');
     verifyCell('customer', rowNumber, CUSTOMER_TOTAL_PRICE_COL, currentPrice + amountPaid, 'total price after extension');
     verifyCell('customer', rowNumber, CUSTOMER_PAIDBY_COL, paidBy, 'paid by after extension');
+
+    // Keeps the shared bike-returns calendar in sync -- moves this row's
+    // calendar event to the new, extended return date.
+    syncCalendarForCustomerRow(rowNumber);
 
     // Everything below mirrors what a brand-new rental (in doPost, above)
     // logs for its payment — the monthly income sheet, the cash sheet (if
@@ -2557,6 +3446,10 @@ function closeBikeForExtend(data) {
     sheet.getRange(rowNumber, CUSTOMER_SITUATION_COL).setValue('Returned');
 
     verifyCell('customer', rowNumber, CUSTOMER_SITUATION_COL, 'Returned', 'situation (close for extend)');
+
+    // Keeps the shared bike-returns calendar in sync -- removes this
+    // row's calendar event now that this booking is closed out.
+    syncCalendarForCustomerRow(rowNumber);
 
     var responsePayload = { success: true };
     var verification = runWriteVerification(ss);
@@ -2696,6 +3589,10 @@ function swapBike(data) {
     verifyCell('customer', rowNumber, CUSTOMER_RETURN_DATE_COL, todayValue, 'old bike: return date');
     verifyCell('customer', rowNumber, CUSTOMER_SITUATION_COL, 'Returned', 'old bike: situation');
 
+    // Keeps the shared bike-returns calendar in sync -- removes the old
+    // bike's calendar event now that this row is closed out.
+    syncCalendarForCustomerRow(rowNumber);
+
     // ---- 2) Append a brand-new row for the new bike, covering the
     // remainder of the original rental window: today through the ORIGINAL
     // return date (read above, before it was overwritten). Dates are
@@ -2736,6 +3633,10 @@ function swapBike(data) {
     verifyCell('customer', newRow, CUSTOMER_RENTFROM_COL, todayDmy, 'new bike: renting-from date');
     verifyCell('customer', newRow, CUSTOMER_RETURN_DATE_COL, origReturnDmy, 'new bike: return date');
     verifyCell('customer', newRow, CUSTOMER_TOTAL_PRICE_COL, newRowTotalPrice, 'new bike: total price');
+
+    // Keeps the shared bike-returns calendar in sync -- creates the
+    // calendar event for the new bike's remainder-of-rental booking.
+    syncCalendarForCustomerRow(newRow);
 
     // ---- 3) Update the "bikes" sheet's per-bike monthly totals. The rule
     // throughout this app is: money is recorded in the month it actually
@@ -3014,6 +3915,210 @@ function columnLetter(col) {
 
 var HEADER_ROWS = 1;
 
+// =====================================================================
+// ---- Calendar sync functions (see CALENDAR_ID near the top of the
+// file). "customer" sheet columns used here: C name, F bikeModel,
+// I returnDate, J returnTime, N situation, Q calendarEventId (this
+// script owns column Q -- it's written and read only by these
+// functions). "Still rented" is defined exactly the way bikes.html's
+// isRentedSituation() defines it: situation !== "Returned". ----
+// =====================================================================
+
+// Looks up a stored calendar event ID safely -- a bad/stale ID (e.g. the
+// event was deleted by hand on the calendar) throws from getEventById()
+// rather than returning null, so this treats that as "not found" instead
+// of letting the whole sync blow up.
+function getCalendarEventSafe_(cal, eventId) {
+  if (!eventId) return null;
+  try {
+    return cal.getEventById(eventId);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Creates, updates, or removes the Google Calendar event for one row of
+// the "customer" sheet, based on that row's current bike/return
+// date/situation. Safe to call as often as you like -- it always
+// re-reads the row fresh and never throws (a calendar problem should
+// never break the sheet write it's piggybacking on). Called directly
+// after every write that can change a row's return date or situation,
+// and also by syncAllReturnsToCalendar()'s periodic sweep below.
+function syncCalendarForCustomerRow(rowNumber) {
+  try {
+    if (!CALENDAR_ID || CALENDAR_ID.indexOf('REPLACE_WITH') === 0) {
+      return; // calendar not configured yet -- skip quietly
+    }
+    if (!rowNumber || rowNumber < (HEADER_ROWS + 1)) return;
+
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName('customer');
+    if (!sheet) return;
+    if (rowNumber > sheet.getLastRow()) return;
+
+    var CAL_NAME_COL = 3;          // C: name
+    var CAL_BIKE_COL = 6;          // F: bikeModel
+    var CAL_RETURN_DATE_COL = 9;   // I: returnDate
+    var CAL_RETURN_TIME_COL = 10;  // J: returnTime
+    var CAL_SITUATION_COL = 14;    // N: situation
+    var CAL_EVENT_ID_COL = 17;     // Q: calendarEventId
+    // R: timeConfirmed -- TRUE once staff have actually agreed a pickup
+    // date/time with the customer via "Adjust Pickup" on Bikes Status, vs.
+    // still just being the placeholder date/time from intake.
+    var CAL_TIME_CONFIRMED_COL = 18;
+    // S: confirmedReturnDate -- calendar-only override of the pickup day,
+    // set alongside R by "Adjust Pickup". Never used for anything other
+    // than which day this calendar event lands on -- the due-date column
+    // (I) that drives the rest of the app is untouched.
+    var CAL_CONFIRMED_DATE_COL = 19;
+
+    var row = sheet.getRange(rowNumber, 1, 1, CAL_CONFIRMED_DATE_COL).getValues()[0];
+
+    var name = (row[CAL_NAME_COL - 1] || '').toString().trim();
+    var bike = (row[CAL_BIKE_COL - 1] || '').toString().trim();
+    var returnDateRaw = row[CAL_RETURN_DATE_COL - 1];
+    var returnTimeRaw = row[CAL_RETURN_TIME_COL - 1];
+    var situation = (row[CAL_SITUATION_COL - 1] || '').toString().trim().toLowerCase();
+    var existingEventId = (row[CAL_EVENT_ID_COL - 1] || '').toString().trim();
+    var timeConfirmedRaw = row[CAL_TIME_CONFIRMED_COL - 1];
+    var timeConfirmed = timeConfirmedRaw === true ||
+      (typeof timeConfirmedRaw === 'string' && timeConfirmedRaw.trim().toLowerCase() === 'true');
+    var confirmedDateRaw = row[CAL_CONFIRMED_DATE_COL - 1];
+
+    var stillOut = situation !== 'returned';
+    var hasReturnDate = returnDateRaw instanceof Date;
+
+    var cal = CalendarApp.getCalendarById(CALENDAR_ID);
+    if (!cal) {
+      Logger.log('Calendar sync: calendar not found for ID ' + CALENDAR_ID);
+      return;
+    }
+
+    // Returned, cancelled, or missing its return date -- remove any
+    // existing event for this row and stop.
+    if (!stillOut || !hasReturnDate || !name || !bike) {
+      if (existingEventId) {
+        var toRemove = getCalendarEventSafe_(cal, existingEventId);
+        if (toRemove) toRemove.deleteEvent();
+        sheet.getRange(rowNumber, CAL_EVENT_ID_COL).setValue('');
+      }
+      return;
+    }
+
+    // Shortened on purpose -- "Due back:" is redundant on a calendar that's
+    // entirely due-back events, so dropping it buys back characters for the
+    // bike/renter before Google truncates the title in tight week/month
+    // cells. Return time already shows automatically next to the title in
+    // Google's own UI, so it isn't repeated in the text either.
+    //
+    // When staff have used "Adjust Pickup" to confirm an actual pickup
+    // date/time (as opposed to intake's placeholder), the title gets a ✅
+    // prefix and the description gets an extra confirmation line, on top
+    // of the green color set below -- three independent signals so the
+    // "this is real, not a guess" status still reads even in a compact
+    // month view or for someone who can't easily distinguish the colors.
+    var confirmedPrefix = timeConfirmed ? String.fromCodePoint(9989) + ' ' : ''; // ✅
+    var title = confirmedPrefix + String.fromCodePoint(128690) + ' ' + bike + ' — ' + name; // 🛵
+    var description = 'Renter: ' + name +
+      '\nBike: ' + bike +
+      (timeConfirmed
+        ? '\n✅ Confirmed pickup — staff-adjusted from the original due date/time.'
+        : '') +
+      '\nSynced automatically from the customer sheet, row ' + rowNumber + '.';
+
+    // Use the staff-confirmed pickup date (column S) for which day this
+    // event lands on when it's set; otherwise fall back to the intake due
+    // date (column I). Either way this only affects the calendar -- it
+    // never writes back to column I.
+    var eventDateSource = (confirmedDateRaw instanceof Date) ? confirmedDateRaw : returnDateRaw;
+    var returnDateOnly = new Date(eventDateSource.getFullYear(), eventDateSource.getMonth(), eventDateSource.getDate());
+    var startTime = null;
+    if (returnTimeRaw instanceof Date) {
+      startTime = new Date(returnDateOnly.getFullYear(), returnDateOnly.getMonth(), returnDateOnly.getDate(),
+        returnTimeRaw.getHours(), returnTimeRaw.getMinutes());
+    }
+    var wantsAllDay = !startTime;
+
+    var event = getCalendarEventSafe_(cal, existingEventId);
+
+    // If the event's type (timed vs. all-day) needs to change, deleting
+    // and recreating is more reliable than trying to convert one into
+    // the other in place.
+    if (event && event.isAllDayEvent() !== wantsAllDay) {
+      event.deleteEvent();
+      event = null;
+    }
+
+    if (event) {
+      if (wantsAllDay) {
+        event.setAllDayDate(returnDateOnly);
+      } else {
+        event.setTime(startTime, new Date(startTime.getTime() + 30 * 60 * 1000));
+      }
+      event.setTitle(title);
+      event.setDescription(description);
+    } else {
+      event = wantsAllDay
+        ? cal.createAllDayEvent(title, returnDateOnly, { description: description })
+        : cal.createEvent(title, startTime, new Date(startTime.getTime() + 30 * 60 * 1000), { description: description });
+      sheet.getRange(rowNumber, CAL_EVENT_ID_COL).setValue(event.getId());
+    }
+
+    // Color always set explicitly (never left to "whatever it already
+    // was") so a confirmed time reliably turns green, and an extension
+    // that resets timeConfirmed back to false reliably turns the event
+    // back to the neutral color -- both directions are a real documented
+    // CalendarApp.EventColor value, never an attempt to "clear" a color.
+    event.setColor(timeConfirmed ? CalendarApp.EventColor.GREEN : CalendarApp.EventColor.PALE_BLUE);
+  } catch (err) {
+    Logger.log('Calendar sync error (row ' + rowNumber + '): ' + err.message);
+  }
+}
+
+// ---- Batch/periodic sweep: syncs every non-blank row of the "customer"
+// sheet. This is both the one-off backfill (run it by hand once, from
+// the Apps Script editor's function dropdown, to populate the calendar
+// with everything currently rented) AND what the installed time-driven
+// trigger calls automatically afterwards, so anything a hook above
+// happens to miss self-heals within 15 minutes. Returns the number of
+// rows checked, and logs the same number (View -> Logs after running, or
+// View -> Executions) so you can confirm it actually ran. ----
+function syncAllReturnsToCalendar() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName('customer');
+  if (!sheet) throw new Error('Sheet named "customer" not found.');
+
+  var lastRow = sheet.getLastRow();
+  var checked = 0;
+  for (var r = HEADER_ROWS + 1; r <= lastRow; r++) {
+    var name = sheet.getRange(r, 3).getValue();
+    if (!name) continue; // skip blank rows
+    syncCalendarForCustomerRow(r);
+    checked++;
+  }
+  Logger.log('Calendar sync: checked ' + checked + ' customer rows.');
+  return checked;
+}
+
+// ---- One-time setup: run this once by hand from the Apps Script
+// editor's function dropdown to install the recurring safety-net sync
+// (every 15 minutes). Safe to run again later -- it removes any
+// previously-installed copy of this same trigger first, so it never
+// doubles up. ----
+function installCalendarSyncTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(function (t) {
+    if (t.getHandlerFunction() === 'syncAllReturnsToCalendar') {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+  ScriptApp.newTrigger('syncAllReturnsToCalendar')
+    .timeBased()
+    .everyMinutes(15)
+    .create();
+  Logger.log('Calendar sync trigger installed: syncAllReturnsToCalendar runs every 15 minutes.');
+}
+
 function doGet(e) {
   try {
     if (e.parameter.action === 'parts') {
@@ -3066,6 +4171,12 @@ function doGet(e) {
       keys.forEach(function(k, ki) {
         obj[k] = cellToString(k, row[ki]);
       });
+      // Column S (index 18, 0-based): confirmedReturnDate -- the staff-
+      // adjusted pickup date set via "Adjust Pickup" on Bikes Status, used
+      // only so that popup can default to whatever the calendar is
+      // currently showing (confirmed date if set, else the due date
+      // above). Formatted the same dd/MM/yyyy way as returnDate.
+      obj.confirmedReturnDate = cellToString('confirmedReturnDate', row[18]);
       obj.rowNumber = HEADER_ROWS + i + 1; // 1-indexed sheet row this record lives on
       return obj;
     }).filter(function(r) { return r.name !== ''; });
@@ -3095,7 +4206,7 @@ function getContractRows() {
     var keys = ['date','contact','number','name','nationality','passport','bikeModel',
                 'rentingDateFrom','returnDate','returnTime','deliverToHotel',
                 'totalPrice','paidBy','deposit','depositAmount','deliveryFee','status',
-                'contractDocUrl','contractPdfUrl','passportPhotoUrl'];
+                'contractDocUrl','contractPdfUrl','passportPhotoUrl','receiptPdfUrl'];
     var tz = ss.getSpreadsheetTimeZone();
 
     function cellToString(key, val) {

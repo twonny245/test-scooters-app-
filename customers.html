@@ -704,6 +704,24 @@ paidFromDepositCheckbox.addEventListener('change', refreshPaidFromDepositUI);
 // deposit category (if any) the dropdown draws from.
 document.getElementById('paidBy').addEventListener('change', () => { if (entrySource === 'extend') refreshPaidFromDepositUI(); });
 
+// Strips the "(price, N days) Deal" suffix this app appends to a contact
+// value. Runs in a loop (not a single pass) so that if a contact value
+// already carries more than one stacked suffix -- e.g. from an older row
+// that was extended before this normalization existed, or a value typed
+// straight into the sheet -- every trailing occurrence is removed, not just
+// the last one. That guarantees the suffix built on submit (below) is ever
+// only appended once, instead of piling up on top of whatever was already
+// there.
+function stripDealSuffix(text) {
+  let result = (text || '').toString().trim();
+  let prev;
+  do {
+    prev = result;
+    result = result.replace(/\s*\([^()]*\)(?:\s*Deal)?\s*$/i, '').trim();
+  } while (result !== prev);
+  return result;
+}
+
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
   statusBox.className = 'status';
@@ -731,7 +749,11 @@ form.addEventListener('submit', async (e) => {
     return;
   }
 
-  const baseContact = contactSelect.value === 'other' ? contactOther.value.trim() : contactSelect.value;
+  // Normalize away any pre-existing "(price, N days) Deal" suffix(es) before
+  // building a fresh one below -- covers the "other" free-text field, where
+  // someone could otherwise paste/retype an already-suffixed value and end
+  // up with it doubled.
+  const baseContact = stripDealSuffix(contactSelect.value === 'other' ? contactOther.value.trim() : contactSelect.value);
 
   function computeDays(fromStr, toStr) {
     if (!fromStr || !toStr) return null;
@@ -874,8 +896,9 @@ function prefillFromQueryParams() {
     const raw = qp.get('contact') || '';
     // Strip off the "(price, N days) Deal" suffix this app itself appends
     // when it originally saved this contact value, so re-editing doesn't
-    // double it up.
-    const baseContact = raw.replace(/\s*\([^()]*\)(?:\s*Deal)?\s*$/i, '').trim();
+    // double it up. stripDealSuffix loops, so it also cleans up rows that
+    // already picked up more than one stacked suffix in the past.
+    const baseContact = stripDealSuffix(raw);
     const knownValues = Array.from(contactSelect.options).map(o => o.value);
     if (baseContact && knownValues.includes(baseContact)) {
       contactSelect.value = baseContact;

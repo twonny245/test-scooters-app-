@@ -34,6 +34,11 @@
     '    flex-wrap:wrap;\n' +
     '    gap:10px;\n' +
     '  }\n' +
+    '  .topbar .brand-group{\n' +
+    '    display:flex;\n' +
+    '    align-items:center;\n' +
+    '    gap:10px;\n' +
+    '  }\n' +
     '  .topbar .brand{\n' +
     '    display:flex;\n' +
     '    align-items:center;\n' +
@@ -51,6 +56,19 @@
     '    color:#fff;\n' +
     '    letter-spacing:.02em;\n' +
     '  }\n' +
+    '  .topbar .cal-link{\n' +
+    '    display:flex;\n' +
+    '    align-items:center;\n' +
+    '    justify-content:center;\n' +
+    '    width:26px; height:26px;\n' +
+    '    border-radius:7px;\n' +
+    '    background:rgba(255,255,255,.12);\n' +
+    '    text-decoration:none;\n' +
+    '    font-size:14px;\n' +
+    '    line-height:1;\n' +
+    '  }\n' +
+    '  .topbar .cal-link:hover{ background:rgba(255,255,255,.22); }\n' +
+    '  .topbar .cal-link.active{ background:rgba(255,255,255,.28); }\n' +
     '  .topbar nav{\n' +
     '    display:flex;\n' +
     '    gap:16px;\n' +
@@ -94,12 +112,21 @@
 
     injectCss();
 
+    // Links to the in-app Calendar page (calendar.html), which embeds the
+    // shared bike-returns Google Calendar directly -- no separate Google
+    // login required, since that calendar is shared publicly by link.
+    var calActive = currentPage() === 'calendar.html' ? ' active' : '';
+    var calLinkHtml = '<a class="cal-link' + calActive + '" href="calendar.html" title="Bike returns calendar">📅</a>';
+
     mount.outerHTML =
       '<div class="topbar">\n' +
-      '  <a class="brand" href="index.html">\n' +
-      '    <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">\n' +
-      '    <span>AA Scooter Rental</span>\n' +
-      '  </a>\n' +
+      '  <div class="brand-group">\n' +
+      '    <a class="brand" href="index.html">\n' +
+      '      <img src="https://scooterrentalchiangmai.com/wp-content/uploads/2025/02/cropped-logo-3333-101x105.png" alt="AA Scooters logo">\n' +
+      '      <span>AA Scooter Rental</span>\n' +
+      '    </a>\n' +
+      '    ' + calLinkHtml + '\n' +
+      '  </div>\n' +
       '  <nav>\n' +
       '    ' + buildLinksHtml() + '\n' +
       '  </nav>\n' +
